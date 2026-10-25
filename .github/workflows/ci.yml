@@ -7,6 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Install GDB for the debugger proof
+        run: sudo apt-get update && sudo apt-get install -y gdb
       - run: python3 -m unittest discover -s tests -v
       - run: node --test tests/progress.test.mjs
       - name: Verify a real breakpoint and local variables
