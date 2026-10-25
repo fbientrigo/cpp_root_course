@@ -1,8 +1,26 @@
 {
+  "C_Cpp.intelliSenseEngine": "disabled",
   "C_Cpp.default.cppStandard": "c++17",
   "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
-  "C_Cpp.default.includePath": ["${workspaceFolder}/engine"],
-  "files.associations": {"*.hpp": "cpp"},
-  "files.exclude": {"**/__pycache__": true},
-  "editor.formatOnSave": false
+  "C_Cpp.default.includePath": [
+    "${workspaceFolder}/engine"
+  ],
+  "clangd.arguments": [
+    "--background-index",
+    "--clang-tidy"
+  ],
+  "files.associations": {
+    "*.hpp": "cpp"
+  },
+  "files.exclude": {
+    "**/__pycache__": true
+  },
+  "editor.formatOnSave": false,
+  "[cpp]": {
+    "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+  },
+  "errorLens.enabledDiagnosticLevels": [
+    "error",
+    "warning"
+  ]
 }
