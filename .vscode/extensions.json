@@ -1,1 +1,8 @@
-{"recommendations":["ms-vscode.cpptools","ms-vsliveshare.vsliveshare"]}
+{
+  "recommendations": [
+    "llvm-vs-code-extensions.vscode-clangd",
+    "usernamehw.errorlens",
+    "ms-vscode.cpptools",
+    "ms-vsliveshare.vsliveshare"
+  ]
+}
