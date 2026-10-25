@@ -4,4 +4,6 @@
 /dist/
 __pycache__/
 *.pyc
+/game
+/game.exe
 .DS_Store

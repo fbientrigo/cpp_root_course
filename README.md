@@ -8,6 +8,8 @@ las decisiones y el modelo de cada sesión.
 [Syllabus y seguimiento](https://fbientrigo.github.io/cpp_root_course/) ·
 [Descargar ZIP](https://github.com/fbientrigo/cpp_root_course/archive/refs/heads/main.zip)
 
+![Seguimiento local del curso y syllabus por sesiones](docs/preview.jpg)
+
 ## Instalación
 
 **Recomendado: Ubuntu o Windows con Ubuntu/WSL2.** Solo GCC/Clang y Python 3.8+

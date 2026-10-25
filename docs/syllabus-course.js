@@ -13,3 +13,9 @@ window.addEventListener('DOMContentLoaded', () => {
  if (reduced) { for(let i=1;i<=6;i++) drawSparkline('node-wave-'+i, .15, 2.5, i); drawTH1DCanvas(); }
  document.querySelectorAll('canvas').forEach(c => { c.setAttribute('role','img'); c.setAttribute('aria-label','Curva ilustrativa del syllabus; no son datos medidos ni resultados de ROOT.'); });
 });
+SESSIONS[0].title = 'Compilación, contratos y movimiento';
+SESSIONS[1].objectives[2] = 'Diseñar métodos que modifican estado privado conservando sus invariantes.';
+SESSIONS[3].title = 'Algoritmos y cortes de selección';
+SESSIONS[3].processes = ['const Event&', 'selection_cuts()', 'masa de un par'];
+SESSIONS[3].objectives = ['Expresar un criterio sobre candidatos sin modificar el evento original.', 'Comparar espectros antes y después de cortes de carga y pT.', 'Reconstruir la masa sumando cuadrimomentos de pares ya preparados. Combinatoria sobre muchas pistas queda como extensión.'];
+SESSIONS[5].title = 'Proyecto integrador: análisis y explicación';

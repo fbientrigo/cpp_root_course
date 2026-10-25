@@ -340,7 +340,7 @@
               <span class="text-[11px] px-1.5 py-0.5 border border-zinc-800 bg-zinc-100 font-medium">6 SESIONES // 3 SEMANAS</span>
             </div>
             <p class="text-zinc-600 text-xs max-w-4xl leading-relaxed">
-              Programa intensivo de mentoría práctica (2 sesiones/semana, 70 min por sesión) diseñado para investigadores y analistas de datos.
+              Programa intensivo de mentoría práctica (2 sesiones/semana, 60 min por sesión) diseñado para investigadores y analistas de datos.
               Se reemplaza la memorización de librerías por exploración asistida por compilador (<code>clangd</code>/LSP), programación en pareja (<strong>Driver/Navigator</strong>) y construcción de algoritmos propios sobre estructuras de <strong>CERN ROOT</strong> en Linux/WSL.
             </p>
             <!-- Instructor Banner Alert when ON -->
@@ -532,7 +532,7 @@
 
             <div class="flex justify-between text-[11px] text-zinc-600 mb-1">
               <span id="histEventsLabel">&darr; 50,000 evts</span>
-              <span id="histPeakLabel">&uarr; S/B: 1.42 &sigma;</span>
+              <span id="histPeakLabel">&uarr; S/B: ilustrativo 1.42</span>
             </div>
 
             <!-- Live Canvas for ROOT TH1D Step Plot -->
@@ -1546,7 +1546,7 @@ int main(int argc, char** argv) {
       if (state.cutsApplied) {
         btn.textContent = 'CUTS: ON (pT>2.0)';
         btn.className = 'border border-sky-700 bg-sky-100 text-sky-900 font-semibold px-1.5 py-0.2 text-[10px]';
-        peakLbl.textContent = '↑ S/B: 8.94 σ';
+        peakLbl.textContent = '↑ S/B ilustrativo: 8.94';
         peakLbl.className = 'text-emerald-600 font-semibold';
         statusTxt.textContent = 'filtered: clean resonance peak';
         appendLog("INFO", "applied selection cuts (pT > 2.0 GeV, q1*q2 < 0): background suppressed");
