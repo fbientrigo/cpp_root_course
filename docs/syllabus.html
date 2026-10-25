@@ -1,0 +1,1708 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WIRED / OBSERVATORY // CPP_ROOT_SYLLABUS</title>
+  <link rel="stylesheet" href="syllabus-utilities.css">
+  <style>
+    :root {
+      --bg-paper: #fbfbfa;
+      --bg-panel: #ffffff;
+      --ink-black: #18181b;
+      --ink-dark: #27272a;
+      --ink-mid: #52525b;
+      --ink-muted: #71717a;
+      --ink-faint: #e4e4e7;
+      --cyan-bg: rgba(186, 230, 253, 0.55);
+      --cyan-border: #0284c7;
+      --emerald: #10b981;
+      --amber: #d97706;
+      --amber-bg: #fffbeb;
+    }
+
+    * {
+      box-sizing: border-box;
+      border-radius: 0 !important;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-paper);
+      color: var(--ink-black);
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 12.5px;
+      line-height: 1.5;
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+
+    }
+
+    ::selection {
+      background: #bae6fd;
+      color: #18181b;
+    }
+
+    /* Custom Scrollbar - sharp technical style */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg-paper);
+      border-left: 1px solid var(--ink-faint);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--ink-mid);
+    }
+
+    /* Crisp 1px borders */
+    .b-box {
+      border: 1px solid var(--ink-dark);
+      background: var(--bg-panel);
+    }
+    .b-top { border-top: 1px solid var(--ink-dark); }
+    .b-bottom { border-bottom: 1px solid var(--ink-dark); }
+    .b-left { border-left: 1px solid var(--ink-dark); }
+    .b-right { border-right: 1px solid var(--ink-dark); }
+    .b-faint-b { border-bottom: 1px solid var(--ink-faint); }
+    .b-faint-t { border-top: 1px solid var(--ink-faint); }
+
+    /* Navigation Item Styling */
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      text-align: left;
+      padding: 5px 8px;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      color: var(--ink-black);
+      border: 1px solid transparent;
+      background: transparent;
+      cursor: pointer;
+      transition: background 0.1s ease;
+    }
+    .nav-btn:hover {
+      background: rgba(186, 230, 253, 0.3);
+    }
+    .nav-btn.active {
+      background: var(--cyan-bg);
+      border-color: #38bdf8;
+      font-weight: 600;
+    }
+
+    /* Technical Buttons */
+    .tech-btn {
+      border: 1px solid var(--ink-dark);
+      background: var(--bg-panel);
+      color: var(--ink-black);
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.1s ease;
+    }
+    .tech-btn:hover {
+      background: var(--cyan-bg);
+      border-color: var(--cyan-border);
+    }
+    .tech-btn.active-mode {
+      background: var(--ink-black);
+      color: var(--bg-paper);
+    }
+    .tech-btn.amber-mode {
+      background: var(--amber-bg);
+      border-color: var(--amber);
+      color: #92400e;
+      font-weight: 600;
+    }
+
+    /* Progress Bar Segments */
+    .meter-track {
+      height: 10px;
+      border: 1px solid var(--ink-dark);
+      background: var(--bg-paper);
+      padding: 1px;
+      display: flex;
+    }
+    .meter-fill {
+      height: 100%;
+      background: var(--ink-mid);
+      transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* Topology Node Styling */
+    .topo-node {
+      border: 1px solid var(--ink-dark);
+      background: var(--bg-panel);
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+      position: relative;
+      z-index: 2;
+    }
+    .topo-node:hover {
+      border-color: var(--cyan-border);
+      background: #f8fafc;
+    }
+    .topo-node.selected {
+      border: 1.5px solid var(--cyan-border);
+      background: rgba(224, 242, 254, 0.35);
+    }
+
+    /* Connection Ports */
+    .port-dot {
+      width: 5px;
+      height: 5px;
+      background: var(--cyan-border);
+      display: inline-block;
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      background: var(--emerald);
+      display: inline-block;
+      border-radius: 9999px !important;
+    }
+    .status-dot.amber {
+      background: var(--amber);
+    }
+    .status-dot.hollow {
+      background: transparent;
+      border: 1.5px solid var(--ink-muted);
+    }
+
+    /* Instructor Overlay Box */
+    .instructor-layer {
+      display: none;
+      border: 1px dashed var(--amber);
+      background: var(--amber-bg);
+      padding: 10px 12px;
+      margin-top: 10px;
+      color: #78350f;
+      font-size: 11.5px;
+    }
+    body.instructor-on .instructor-layer {
+      display: block;
+    }
+
+    /* Code block styling */
+    pre.code-view {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px;
+      line-height: 1.55;
+      overflow-x: auto;
+      background: #fbfbfa;
+      border: 1px solid var(--ink-faint);
+      padding: 12px;
+      color: var(--ink-black);
+    }
+
+    .jp-text {
+      font-family: 'Noto Sans JP', monospace;
+    }
+  </style>
+</head>
+<body>
+  <div style="padding:10px 20px;border-bottom:1px solid #27272a;background:#e0f2fe;font-size:12px"><a href="./">← MI RECORRIDO / PERFILES Y PROGRESO</a> · Este syllabus es una visualización: sus curvas no ejecutan ROOT ni detectan herramientas instaladas.</div>
+
+  <!-- ==================== TOP OBSERVATORY BAR ==================== -->
+  <header class="b-bottom px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 bg-[#fbfbfa] sticky top-0 z-30">
+    <!-- Left Brand -->
+    <div class="flex items-center gap-3.5">
+      <div class="w-5 h-5 border border-zinc-900 flex items-center justify-center p-0.5">
+        <div class="w-2.5 h-3.5 bg-zinc-900"></div>
+      </div>
+      <div class="tracking-widest font-semibold text-xs sm:text-sm">
+        WIRED &nbsp;/&nbsp; OBSERVATORY <span class="text-zinc-400 font-normal">//</span> <span class="text-zinc-700">CPP_ROOT_SYLLABUS</span>
+      </div>
+    </div>
+
+    <!-- Right Controls & Clock -->
+    <div class="flex flex-wrap items-center gap-3 sm:gap-5 text-xs">
+      <span class="hidden md:inline text-zinc-500 tracking-wider">PAIR_PROGRAMMING / LSP_DRIVEN</span>
+
+      <!-- Cut Filter Button for Live Simulation -->
+      <button id="btnTriggerSim" onclick="runColliderBatch()" class="tech-btn" title="Ejecutar lote de eventos en el simulador TH1D">
+        <span>&#9654; RUN_COLLIDER_BATCH</span>
+      </button>
+
+      <!-- Instructor Notes Toggle -->
+      <button id="btnInstructor" onclick="toggleInstructorMode()" class="tech-btn" title="Atajo de teclado: tecla [ I ]">
+        <span id="instructorDot" class="w-2 h-2 bg-zinc-400 inline-block"></span>
+        <span id="instructorLabel">[ INSTRUCTOR_NOTES: OFF ]</span>
+      </button>
+
+      <!-- Live Clock -->
+      <div class="text-right leading-tight font-medium text-[11px]">
+        <div id="clockDate">2026-10-24 &nbsp;22:22:00</div>
+        <div class="text-zinc-500">CHL (UTC-3)</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== MAIN WORKSPACE ==================== -->
+  <div class="flex-1 grid grid-cols-1 lg:grid-cols-[215px_1fr]">
+
+    <!-- LEFT SIDEBAR -->
+    <aside class="b-right p-3.5 flex flex-col justify-between bg-[#fbfbfa]">
+      <div>
+        <div class="text-[10px] tracking-widest text-zinc-400 uppercase mb-2 px-2">NAVIGATION_TREE</div>
+        <nav class="flex flex-col gap-1" id="sidebarNav">
+          <button onclick="setView('OVERVIEW')" data-view="OVERVIEW" class="nav-btn active">
+            <span>&#9656; OVERVIEW</span>
+            <span class="text-[10px] text-zinc-400">ALL</span>
+          </button>
+          <button onclick="setView('TOPOLOGY')" data-view="TOPOLOGY" class="nav-btn">
+            <span>&#9656; TOPOLOGY_HUB</span>
+            <span class="text-[10px] text-zinc-400">MAP</span>
+          </button>
+          <button onclick="setView('WK_01')" data-view="WK_01" class="nav-btn">
+            <span>&#9656; WK_01: CORE_OOP</span>
+            <span class="text-[10px] text-zinc-400">S1-S2</span>
+          </button>
+          <button onclick="setView('WK_02')" data-view="WK_02" class="nav-btn">
+            <span>&#9656; WK_02: MEM_ALGO</span>
+            <span class="text-[10px] text-zinc-400">S3-S4</span>
+          </button>
+          <button onclick="setView('WK_03')" data-view="WK_03" class="nav-btn">
+            <span>&#9656; WK_03: TTREE_IO</span>
+            <span class="text-[10px] text-zinc-400">S5-S6</span>
+          </button>
+          <button onclick="setView('WARMUPS')" data-view="WARMUPS" class="nav-btn">
+            <span>&#9656; WARMUP_DRILLS</span>
+            <span class="text-[10px] text-zinc-400">6x10m</span>
+          </button>
+          <button onclick="setView('HARNESS')" data-view="HARNESS" class="nav-btn">
+            <span>&#9656; CODE_INSPECTOR</span>
+            <span class="text-[10px] text-sky-600 font-semibold">.H/.CXX</span>
+          </button>
+        </nav>
+
+        <!-- Session Quick Jump -->
+        <div class="mt-6">
+          <div class="text-[10px] tracking-widest text-zinc-400 uppercase mb-2 px-2">DIRECT_NODE_INSPECT</div>
+          <div class="grid grid-cols-3 gap-1 px-1">
+            <button onclick="selectSession(1)" id="quick-s1" class="tech-btn justify-center">S01</button>
+            <button onclick="selectSession(2)" id="quick-s2" class="tech-btn justify-center">S02</button>
+            <button onclick="selectSession(3)" id="quick-s3" class="tech-btn justify-center">S03</button>
+            <button onclick="selectSession(4)" id="quick-s4" class="tech-btn justify-center">S04</button>
+            <button onclick="selectSession(5)" id="quick-s5" class="tech-btn justify-center">S05</button>
+            <button onclick="selectSession(6)" id="quick-s6" class="tech-btn justify-center">S06</button>
+          </div>
+        </div>
+
+        <!-- Keyboard Shortcuts Box -->
+        <div class="mt-6 px-2 py-2.5 border border-zinc-300 bg-white text-[11px] text-zinc-600 space-y-1">
+          <div class="font-semibold text-zinc-900 mb-1">ATAJOS DE CONSOLA</div>
+          <div class="flex justify-between"><span>[ 1 - 6 ]</span><span>Inspeccionar S01-S06</span></div>
+          <div class="flex justify-between"><span>[ I ]</span><span>Notas Instructor</span></div>
+          <div class="flex justify-between"><span>[ R ]</span><span>Simular Colisiones</span></div>
+        </div>
+      </div>
+
+      <!-- Philosophical Footer Note (Lain / Observatory homage) -->
+      <div class="mt-8 pt-4 b-faint-t text-[11px] text-zinc-400 space-y-2 leading-relaxed">
+        <div class="text-zinc-600 font-medium">observatory</div>
+        <p>
+          The boundary between syntax and physics is getting thinner.
+        </p>
+        <div>—</div>
+        <p class="jp-text text-[10.5px]">
+          構文と物理の境界はもっと<br/>薄くなっていく
+        </p>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="p-4 sm:p-6 flex flex-col justify-between gap-6">
+
+      <!-- TOP SECTION: ACTIVE VIEW CONTAINER -->
+      <div class="space-y-6">
+
+        <!-- 1. EXECUTIVE SPEC BAR -->
+        <section class="b-box p-4 grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4 items-center">
+          <div>
+            <div class="flex flex-wrap items-center gap-2.5 mb-1.5">
+              <span class="status-dot"></span>
+              <h1 class="font-bold text-sm sm:text-base tracking-wide">
+                ARQUITECTURA DE ALGORITMOS EN C++17 &amp; ANÁLISIS EN CERN ROOT
+              </h1>
+              <span class="text-[11px] px-1.5 py-0.5 border border-zinc-800 bg-zinc-100 font-medium">6 SESIONES // 3 SEMANAS</span>
+            </div>
+            <p class="text-zinc-600 text-xs max-w-4xl leading-relaxed">
+              Programa intensivo de mentoría práctica (2 sesiones/semana, 70 min por sesión) diseñado para investigadores y analistas de datos.
+              Se reemplaza la memorización de librerías por exploración asistida por compilador (<code>clangd</code>/LSP), programación en pareja (<strong>Driver/Navigator</strong>) y construcción de algoritmos propios sobre estructuras de <strong>CERN ROOT</strong> en Linux/WSL.
+            </p>
+            <!-- Instructor Banner Alert when ON -->
+            <div class="instructor-layer mt-3">
+              <strong>[ MODO INSTRUCTOR ACTIVO — ARQUITECTURA OCULTA: PARTICLE-MON / HADRONDEX ]</strong><br/>
+              El alumno ve un curso formal de C++ y física de datos, pero el código base que le entregas en cada sesión (<code>engine/particle_mon.h</code>) es un motor de captura, combate por turnos y síntesis de partículas estilo Pokémon. Revisa las cajas ámbar dentro de cada nodo para ver cómo guiar la sesión.
+            </div>
+          </div>
+
+          <!-- Mini Spec Telemetry -->
+          <div class="xl:border-l border-zinc-200 xl:pl-4 space-y-1.5 text-[11px]">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-zinc-500 w-28">MODALIDAD</span>
+              <span class="font-semibold">80% DRIVER (ÉL) / 20% NAV</span>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-zinc-500 w-28">ENTORNO</span>
+              <span class="font-semibold">Ubuntu / WSL2 + g++ + ROOT 6</span>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-zinc-500 w-28">WARMUP DRILL</span>
+              <span class="font-semibold">10m HackerRank / LeetCode</span>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-zinc-500 w-28">MEMORIZACIÓN</span>
+              <span class="text-emerald-600 font-semibold">0% (100% Header/LSP)</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. INTERACTIVE TOPOLOGY NETWORK (BESZEL HUB STYLE) -->
+        <section id="sectionTopology" class="space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="text-[11px] tracking-widest text-zinc-500 uppercase flex items-center gap-2">
+              <span>TOPOLOGY_OBSERVATORY // FLUJO DE DEPENDENCIAS DEL CURSO</span>
+              <span class="text-zinc-400">(Haz clic en cualquier nodo S01–S06 para inspeccionar su especificación y código)</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] text-zinc-500">FILTRO SEMANAL:</span>
+              <button onclick="filterWeek('ALL')" id="flt-ALL" class="tech-btn active-mode">ALL</button>
+              <button onclick="filterWeek(1)" id="flt-1" class="tech-btn">WK_01</button>
+              <button onclick="filterWeek(2)" id="flt-2" class="tech-btn">WK_02</button>
+              <button onclick="filterWeek(3)" id="flt-3" class="tech-btn">WK_03</button>
+            </div>
+          </div>
+
+          <!-- Topology Canvas + Nodes Container -->
+          <div class="b-box p-4 sm:p-6 relative bg-[#fbfbfa] overflow-hidden" id="topologyWrapper">
+            <!-- SVG Orthogonal Lines Behind Nodes -->
+            <svg id="topoSvg" class=" hidden lg:block absolute inset-0 w-full h-full pointer-events-none" style="z-index: 1;"></svg>
+
+            <!-- 3-Column Hub Layout -->
+            <div class="grid grid-cols-1 lg:grid-cols-[1fr_210px_1fr] gap-6 items-center relative z-10">
+
+              <!-- Left Column: S01, S03, S05 -->
+              <div class="space-y-4" id="leftNodesCol"></div>
+
+              <!-- Center Hub: CORE ENGINE -->
+              <div class="flex flex-col items-center justify-center my-4 lg:my-0">
+                <div id="centralHubBox" class="b-box px-4 py-3 text-center w-full shadow-none border-zinc-900 bg-white relative">
+                  <div class="text-[10px] tracking-widest text-sky-700 font-bold uppercase">CORE_HARNESS_HUB</div>
+                  <div class="font-bold text-xs mt-0.5">C++17 // CERN ROOT 6</div>
+                  <div class="my-2 h-[22px] w-full">
+                    <canvas id="hubWaveCanvas" class="w-full h-full block"></canvas>
+                  </div>
+                  <div class="text-[10px] text-zinc-500 flex justify-between border-t border-zinc-200 pt-1.5">
+                    <span>LSP: clangd</span>
+                    <span class="text-emerald-600 font-semibold">● LINKED</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right Column: S02, S04, S06 -->
+              <div class="space-y-4" id="rightNodesCol"></div>
+
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. DETAILED SESSION INSPECTOR & CODE WORKBENCH -->
+        <section id="sectionInspector" class="grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-5">
+
+          <!-- LEFT: Selected Session Deep Spec -->
+          <div class="b-box p-4 sm:p-5 flex flex-col justify-between" id="sessionDetailCard">
+            <!-- Populated dynamically via JS -->
+          </div>
+
+          <!-- RIGHT: Live C++/ROOT Code & Warmup Drill Workbench -->
+          <div class="b-box p-4 sm:p-5 flex flex-col justify-between bg-white">
+            <div>
+              <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 b-faint-b">
+                <div class="flex items-center gap-2">
+                  <span class="port-dot"></span>
+                  <span class="font-bold text-xs tracking-wide" id="codePanelTitle">ARTIFACT_INSPECTOR // S01</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <button onclick="switchCodeTab('HEADER')" id="tabBtn-HEADER" class="tech-btn active-mode">HEADER (.h)</button>
+                  <button onclick="switchCodeTab('IMPL')" id="tabBtn-IMPL" class="tech-btn">MAIN (.cxx)</button>
+                  <button onclick="switchCodeTab('WARMUP')" id="tabBtn-WARMUP" class="tech-btn">DRILL (10m)</button>
+                  <button onclick="copyActiveCode()" id="btnCopyCode" class="tech-btn" title="Copiar código al portapapeles">COPY</button>
+                </div>
+              </div>
+
+              <!-- Code / Drill Viewer -->
+              <div class="mt-3">
+                <pre id="codeDisplayArea" class="code-view max-h-[320px]"></pre>
+              </div>
+            </div>
+
+            <!-- Compilation Command Footer -->
+            <div class="mt-4 pt-3 b-faint-t flex flex-wrap items-center justify-between gap-2 text-[11px]">
+              <div class="text-zinc-600 truncate">
+                <span class="text-zinc-400">$</span> <code id="compileCmdText" class="text-zinc-900 font-medium">g++ -std=c++17 main.cxx $(root-config --cflags --libs) -o analysis</code>
+              </div>
+              <span class="text-emerald-600 font-semibold">[ EXIT_CODE: 0 ]</span>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- 4. ALL WARMUPS MATRIX VIEW (Hidden unless WARMUPS tab clicked) -->
+        <section id="sectionWarmupsMatrix" class="hidden b-box p-5 space-y-4">
+          <div class="flex items-center justify-between b-faint-b pb-2.5">
+            <div>
+              <h2 class="font-bold text-sm">MATRIZ DE CALENTAMIENTO ALGORÍTMICO (HACKERRANK / LEETCODE — 10 MIN POR SESIÓN)</h2>
+              <p class="text-xs text-zinc-500">Cada micro-ejercicio aísla exactamente el patrón lógico que el alumno programará minutos después sobre datos de CERN ROOT.</p>
+            </div>
+            <button onclick="setView('OVERVIEW')" class="tech-btn">VOLVER AL MAPA</button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="warmupCardsGrid"></div>
+        </section>
+
+      </div>
+
+      <!-- ==================== BOTTOM 4-PANEL TELEMETRY STRIP ==================== -->
+      <section class="pt-2">
+        <div class="text-[10px] tracking-widest text-zinc-400 uppercase mb-2">
+          OBSERVATORY_TELEMETRY // MÉTRICAS EN TIEMPO REAL Y SIMULADOR TH1D
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">
+
+          <!-- PANEL 1: SYSTEM / CURRICULUM METRICS -->
+          <div class="b-box p-3.5 flex flex-col justify-between">
+            <div class="b-faint-b pb-1.5 mb-2.5 flex justify-between items-center font-semibold text-xs">
+              <span>SYSTEM &nbsp;<span class="font-normal text-zinc-500">(session_load)</span></span>
+              <span id="sysNodeTag" class="text-[11px] text-sky-700">S01_ACTIVE</span>
+            </div>
+
+            <div class="space-y-2.5 text-[11.5px]">
+              <div class="grid grid-cols-[54px_1fr_70px_34px] items-center gap-2">
+                <span class="flex items-center gap-1.5"><span class="port-dot"></span>CPP</span>
+                <div class="meter-track"><div id="barCpp" class="meter-fill" style="width: 45%"></div></div>
+                <canvas id="sparkCpp" width="70" height="14" class="block"></canvas>
+                <span id="valCpp" class="text-right font-medium">45%</span>
+              </div>
+
+              <div class="grid grid-cols-[54px_1fr_70px_34px] items-center gap-2">
+                <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 bg-zinc-800 inline-block"></span>ROOT</span>
+                <div class="meter-track"><div id="barRoot" class="meter-fill" style="width: 50%"></div></div>
+                <canvas id="sparkRoot" width="70" height="14" class="block"></canvas>
+                <span id="valRoot" class="text-right font-medium">50%</span>
+              </div>
+
+              <div class="grid grid-cols-[54px_1fr_70px_34px] items-center gap-2">
+                <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 bg-zinc-800 inline-block"></span>ALGO</span>
+                <div class="meter-track"><div id="barAlgo" class="meter-fill" style="width: 35%"></div></div>
+                <canvas id="sparkAlgo" width="70" height="14" class="block"></canvas>
+                <span id="valAlgo" class="text-right font-medium">35%</span>
+              </div>
+
+              <div class="grid grid-cols-[54px_1fr_70px_34px] items-center gap-2">
+                <span class="flex items-center gap-1.5"><span class="port-dot"></span>MEM</span>
+                <div class="meter-track"><div id="barMem" class="meter-fill" style="width: 0%"></div></div>
+                <canvas id="sparkMem" width="70" height="14" class="block"></canvas>
+                <span id="valMem" class="text-right text-emerald-600 font-semibold">0%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANEL 2: KINEMATIC INK TH1D HISTOGRAM SIMULATOR -->
+          <div class="b-box p-3.5 flex flex-col justify-between">
+            <div class="b-faint-b pb-1.5 mb-2 flex justify-between items-center text-xs">
+              <span class="font-semibold">TH1D_MASS &nbsp;<span class="font-normal text-zinc-500">(kinematic_ink)</span></span>
+              <button onclick="toggleSelectionCuts()" id="btnToggleCuts" class="border border-zinc-700 px-1.5 py-0.2 text-[10px] hover:bg-sky-100">
+                CUTS: OFF
+              </button>
+            </div>
+
+            <div class="flex justify-between text-[11px] text-zinc-600 mb-1">
+              <span id="histEventsLabel">&darr; 50,000 evts</span>
+              <span id="histPeakLabel">&uarr; S/B: 1.42 &sigma;</span>
+            </div>
+
+            <!-- Live Canvas for ROOT TH1D Step Plot -->
+            <div class="border border-zinc-200 bg-[#fbfbfa] h-[76px] w-full relative">
+              <canvas id="th1dCanvas" class="w-full h-full block"></canvas>
+            </div>
+
+            <div class="mt-1.5 flex justify-between text-[10px] text-zinc-500">
+              <span>M_inv [GeV/c²]</span>
+              <span id="histStatusText">raw pion bg + resonance</span>
+            </div>
+          </div>
+
+          <!-- PANEL 3: SERVICES / TOOLCHAIN STACK -->
+          <div class="b-box p-3.5 flex flex-col justify-between">
+            <div class="b-faint-b pb-1.5 mb-2 flex justify-between items-center font-semibold text-xs">
+              <span>SERVICES &nbsp;<span class="font-normal text-zinc-500">(toolchain)</span></span>
+              <span class="text-[11px] text-emerald-600 font-medium">NOMINAL</span>
+            </div>
+
+            <ul class="space-y-1 text-[11.5px]">
+              <li class="grid grid-cols-[28px_1fr_62px_54px] items-center">
+                <span>[<span class="status-dot mx-0.5"></span>]</span>
+                <span>g++ / C++17</span>
+                <span class="text-zinc-600">running</span>
+                <span class="text-right text-zinc-500">v13.2</span>
+              </li>
+              <li class="grid grid-cols-[28px_1fr_62px_54px] items-center">
+                <span>[<span class="status-dot mx-0.5"></span>]</span>
+                <span>cern-root</span>
+                <span class="text-zinc-600">linked</span>
+                <span class="text-right text-zinc-500">v6.32</span>
+              </li>
+              <li class="grid grid-cols-[28px_1fr_62px_54px] items-center">
+                <span>[<span class="status-dot mx-0.5"></span>]</span>
+                <span>clangd-lsp</span>
+                <span class="text-zinc-600">indexing</span>
+                <span class="text-right text-zinc-500">0ms</span>
+              </li>
+              <li class="grid grid-cols-[28px_1fr_62px_54px] items-center">
+                <span>[<span class="status-dot mx-0.5"></span>]</span>
+                <span>pair-driver</span>
+                <span class="text-zinc-600">active</span>
+                <span class="text-right text-zinc-500">2x/wk</span>
+              </li>
+              <li class="grid grid-cols-[28px_1fr_62px_54px] items-center">
+                <span id="srvHarnessIndicator">[<span class="status-dot hollow mx-0.5"></span>]</span>
+                <span>particle-mon</span>
+                <span id="srvHarnessState" class="text-zinc-400">stealth</span>
+                <span class="text-right text-zinc-500">v1.0</span>
+              </li>
+              <li class="grid grid-cols-[28px_1fr_62px_54px] items-center">
+                <span>[<span class="status-dot hollow mx-0.5"></span>]</span>
+                <span>rote-memorize</span>
+                <span class="text-zinc-400">stopped</span>
+                <span class="text-right text-zinc-400">---</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- PANEL 4: STDOUT WORKFLOW LOG -->
+          <div class="b-box p-3.5 flex flex-col justify-between">
+            <div class="b-faint-b pb-1.5 mb-2 flex justify-between items-center font-semibold text-xs">
+              <span>LOG &nbsp;<span class="font-normal text-zinc-500">(observatory_stdout)</span></span>
+              <button onclick="clearLogs()" class="text-[10px] text-zinc-400 hover:text-zinc-800">CLEAR</button>
+            </div>
+
+            <div id="logContainer" class="space-y-1 text-[11px] font-mono overflow-y-auto max-h-[118px]">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ==================== FOOTER ==================== -->
+  <footer class="b-top px-5 py-2 text-[11px] text-zinc-500 flex flex-wrap justify-between items-center bg-[#fbfbfa]">
+    <div>last build: <span id="footerTimestamp">2026-10-24T22:22:00Z</span> &nbsp;/&nbsp; all systems nominal &nbsp;/&nbsp; target: linux-x86_64 &amp; wsl2</div>
+    <div class="jp-text">みんな、どこかで、つながってる — C++17 / ROOT 6</div>
+  </footer>
+
+  <!-- ==================== JAVASCRIPT ENGINE ==================== -->
+  <script>
+    /********************************************************************
+     * 1. COURSE SYLLABUS DATABASE (6 SESSIONS + HARNESS + CODE + DRILLS)
+     ********************************************************************/
+    const SESSIONS = [
+      {
+        id: 1,
+        code: "S01",
+        week: 1,
+        nodeName: "BUILD_ENV",
+        ipTag: "100.64.01.17",
+        duration: "70m",
+        status: "ONLINE",
+        title: "Entorno Linux/WSL, Compilación Real e Inspección por LSP",
+        subtitle: "Eliminar la dependencia de la memoria: cómo explorar librerías mediante cabeceras y autocompletado.",
+        metrics: { cpp: 55, root: 45, algo: 30, mem: 0 },
+        processes: ["g++ -std=c++17", "root-config --libs", "clangd --background-index"],
+        objectives: [
+          "Comprender la diferencia entre un macro interpretado por Cling (`root -l script.C`) y un binario real compilado con `g++` enlazando las librerías de CERN ROOT.",
+          "Configurar `clangd` / IntelliSense en VS Code (sobre Ubuntu o WSL2) para que al escribir `.` o `->` sobre un objeto de ROOT aparezcan todos sus métodos y tipos de retorno sin buscarlos en internet ni memorizarlos.",
+          "Inspeccionar archivos de cabecera (`.h`) para deducir contratos de clases desconocidas."
+        ],
+        pairProtocol: "10m Warmup en HackerRank -> 15m Configuración de Makefile/compile_commands.json -> 40m él al teclado explorando un header desconocido usando únicamente autocompletado y graficando un TH1D.",
+        instructorNote: {
+          title: "MECÁNICA OCULTA S01: EL ESCÁNER HADRONDEX (DESCUBRIMIENTO CIEGO)",
+          body: "Le entregas un archivo pre-hecho `engine/scanner_mystery.h` que contiene la clase `WildAnomaly`. No le dices qué funciones tiene. Su misión en vivo es instanciar `WildAnomaly` en `main.cxx`, presionar `.` en su editor, descubrir que existen los métodos `.scanEnergy()`, `.getPDGCode()` y `.attemptCapture()`, y llenar un `TH1D` con 1,000 escaneos para descubrir qué partícula salvaje está oculta en la ruta 1."
+        },
+        compileCmd: "g++ -std=c++17 s01_scanner.cxx $(root-config --cflags --libs) -o s01_scanner && ./s01_scanner",
+        headerCode: `// engine/scanner_mystery.h — Entregado al alumno en S01
+#pragma once
+#include <TRandom3.h>
+#include <cmath>
+
+namespace Observatory {
+  class WildAnomaly {
+  private:
+    TRandom3 rng_;
+    int pdg_id_;
+  public:
+    WildAnomaly(unsigned int seed = 42) : rng_(seed), pdg_id_(211) {}
+
+    // El alumno descubre estos métodos usando autocompletado (clangd)
+    double measureTransverseMomentum() {
+      return rng_.Landau(2.4, 0.55); // GeV/c
+    }
+
+    double measureInvariantMass() {
+      return rng_.Gaus(3.096, 0.045); // Pico J/psi simulado
+    }
+
+    bool isStableEncounter(double pt_threshold) const {
+      return pt_threshold > 1.5;
+    }
+  };
+}`,
+        implCode: `// s01_scanner.cxx — Escrito por el alumno (Driver) en vivo
+#include <iostream>
+#include <TH1D.h>
+#include <TCanvas.h>
+#include "engine/scanner_mystery.h"
+
+int main() {
+  Observatory::WildAnomaly scanner(1337);
+
+  // Sin memorizar constructores: clangd muestra los parámetros de TH1D
+  TH1D* h_mass = new TH1D("h_mass", "Escaneo de Masa;M [GeV/c^{2}];Eventos", 60, 2.5, 3.7);
+
+  for (int i = 0; i < 5000; ++i) {
+    double pt = scanner.measureTransverseMomentum();
+    if (scanner.isStableEncounter(pt)) {
+      h_mass->Fill(scanner.measureInvariantMass());
+    }
+  }
+
+  TCanvas* c1 = new TCanvas("c1", "Observatory Scanner", 800, 600);
+  h_mass->Draw("HIST");
+  c1->SaveAs("s01_first_scan.pdf");
+  return 0;
+}`,
+        warmup: {
+          platform: "HackerRank (C++)",
+          problem: "Functions & Basic Data Types",
+          goal: "Calentar la sintaxis de firmas de funciones, tipos de retorno (`double`, `bool`, `int`) y paso de parámetros antes de inspeccionar cabeceras `.h`.",
+          snippet: `// Calentamiento 10m: Definir un filtro limpio sin variables globales
+double computeKineticBoost(double mass, double momentum) {
+    return std::sqrt(mass * mass + momentum * momentum);
+}`
+        }
+      },
+      {
+        id: 2,
+        code: "S02",
+        week: 1,
+        nodeName: "OOP_CLASSES",
+        ipTag: "100.64.02.24",
+        duration: "70m",
+        status: "ONLINE",
+        title: "Diseño de Clases, Estado Interno y Objetos en C++",
+        subtitle: "De estructuras pasivas a objetos con comportamiento propio y su paralelismo con TLorentzVector.",
+        metrics: { cpp: 85, root: 55, algo: 45, mem: 0 },
+        processes: ["class ParticleState", "ROOT::Math::PxPyPzEVector", "const correctness"],
+        objectives: [
+          "Entender qué es una `class` (el plano de memoria) frente a una instancia viva: atributos privados, constructores parametrizados y métodos constantes (`const`).",
+          "Comprender que clases de ROOT como `TLorentzVector` o `ROOT::Math::PxPyPzEVector` no son magia negra, sino clases de C++ con operadores sobrecargados.",
+          "Diseñar métodos que hacen interactuar dos objetos y devuelven un nuevo estado físico."
+        ],
+        pairProtocol: "10m Warmup de Clases -> 15m Diseño en pizarra/comentarios de los atributos de una partícula -> 45m Programar en pareja la clase completa y simular interacciones binarias.",
+        instructorNote: {
+          title: "MECÁNICA OCULTA S02: LA CLASE 'PARTICLEMON' Y TABLA DE TIPOS CUÁNTICOS",
+          body: "Aquí construyen el corazón del clon de Pokémon: `class ParticleMon`. Los 'Stats' son masa, carga eléctrica, cuadrimpulso (`PxPyPzEVector`) y estabilidad (HP). El método `.interactWith(ParticleMon& rival)` calcula el daño o fusión usando física real como tabla de tipos: si tienen igual masa y carga opuesta (Materia vs Antimateria) ocurre 'Aniquilación Súper Efectiva' y sintetizan un fotón o bosón."
+        },
+        compileCmd: "g++ -std=c++17 s02_arena.cxx $(root-config --cflags --libs) -o s02_arena && ./s02_arena",
+        headerCode: `// engine/particle_mon.h — Construido en S02
+#pragma once
+#include <string>
+#include <Math/Vector4D.h>
+
+class ParticleCand {
+private:
+  std::string name_;
+  int charge_;
+  ROOT::Math::PxPyPzEVector p4_;
+  double stability_hp_;
+
+public:
+  ParticleCand(std::string name, int q, double px, double py, double pz, double m)
+    : name_(name), charge_(q), stability_hp_(100.0) {
+    double e = std::sqrt(px*px + py*py + pz*pz + m*m);
+    p4_.SetPxPyPzE(px, py, pz, e);
+  }
+
+  double pt() const { return p4_.Pt(); }
+  double mass() const { return p4_.M(); }
+  int charge() const { return charge_; }
+  const ROOT::Math::PxPyPzEVector& p4() const { return p4_; }
+
+  // Combina dos candidatos (ej. decaimiento o colisión en la arena)
+  double invariantMassWith(const ParticleCand& other) const {
+    return (this->p4_ + other.p4_).M();
+  }
+};`,
+        implCode: `// s02_arena.cxx — Prueba de interacción entre dos objetos
+#include <iostream>
+#include "engine/particle_mon.h"
+
+int main() {
+  // Instanciamos dos muones con cargas opuestas
+  ParticleCand mu_plus("Muon+", +1, 1.8, -0.9, 2.4, 0.1056);
+  ParticleCand mu_minus("Muon-", -1, -1.7, 1.1, -2.1, 0.1056);
+
+  if (mu_plus.charge() + mu_minus.charge() == 0) {
+    double m_mother = mu_plus.invariantMassWith(mu_minus);
+    std::cout << "[ARENA_SYNC] Par neutro detectado. M_inv = "
+              << m_mother << " GeV/c^2\\n";
+  }
+  return 0;
+}`,
+        warmup: {
+          platform: "HackerRank (C++)",
+          problem: "Classes and Objects",
+          goal: "Practicar encapsulamiento (`private` vs `public`), constructores y un método comparador `.calculateTotalScore()` entre instancias.",
+          snippet: `class Box {
+  int l_, b_, h_;
+public:
+  Box(int l, int b, int h) : l_(l), b_(b), h_(h) {}
+  long long CalculateVolume() const { return 1LL * l_ * b_ * h_; }
+};`
+        }
+      },
+      {
+        id: 3,
+        code: "S03",
+        week: 2,
+        nodeName: "MEM_VECTORS",
+        ipTag: "100.64.03.31",
+        duration: "70m",
+        status: "ONLINE",
+        title: "Punteros (*), Referencias (&) y Colecciones con std::vector",
+        subtitle: "Por qué ROOT usa el operador flecha (->) y cómo gestionar 50,000 objetos en memoria sin copias inútiles.",
+        metrics: { cpp: 80, root: 75, algo: 60, mem: 0 },
+        processes: ["std::vector<ParticleCand>", "TRandom3::Gaus", "TH2D->Fill()"],
+        objectives: [
+          "Desmitificar punteros (`*`) y referencias (`&`): cuándo pasar por referencia constante (`const T&`) para no clonar megabytes de datos en cada llamada.",
+          "Entender por qué en ROOT casi todo se instancia en el heap (`new TH1D(...)`) y se invoca con flecha `->`, además de quién es dueño de esa memoria.",
+          "Almacenar lotes dinámicos de objetos en `std::vector` y graficar correlaciones 2D (`TH2D`) en un `TCanvas` multipanel."
+        ],
+        pairProtocol: "10m Warmup de Vectores -> 15m Demostración visual de copia vs referencia -> 45m Generar 50,000 eventos Monte Carlo con `TRandom3` y poblar un dashboard `TCanvas::Divide(2,1)`.",
+        instructorNote: {
+          title: "MECÁNICA OCULTA S03: EL EQUIPO DE 6 (PARTY) Y EL PC DE ALMACENAMIENTO",
+          body: "La mejor forma de que entienda referencias y punteros para siempre: le muestras que si pasa su `ParticleMon` a la función `combatTurn(ParticleMon p)` por valor, cuando la partícula pierde estabilidad o gana energía en la batalla, ¡al terminar la función su partícula original sigue intacta porque peleó un clon! Al cambiarlo a `ParticleMon&` o puntero, el estado persiste en su `std::vector<ParticleMon> party`."
+        },
+        compileCmd: "g++ -std=c++17 s03_swarm.cxx $(root-config --cflags --libs) -o s03_swarm && ./s03_swarm",
+        headerCode: `// engine/swarm_generator.h — Generación estocástica por referencia
+#pragma once
+#include <vector>
+#include <TRandom3.h>
+#include "particle_mon.h"
+
+// Recibe el vector por referencia (&) para llenarlo sin copiar memoria
+inline void spawnEventWave(std::vector<ParticleCand>& wave, int n, TRandom3& rng) {
+  wave.clear();
+  wave.reserve(n);
+  for (int i = 0; i < n; ++i) {
+    int q = (rng.Uniform() > 0.5) ? 1 : -1;
+    double px = rng.Gaus(0.0, 1.8);
+    double py = rng.Gaus(0.0, 1.8);
+    double pz = rng.Gaus(0.0, 3.2);
+    wave.emplace_back("Track", q, px, py, pz, 0.13957); // Masa pión
+  }
+}`,
+        implCode: `// s03_swarm.cxx — Punteros en ROOT (->) y colecciones std::vector
+#include <TH2D.h>
+#include <TCanvas.h>
+#include "engine/swarm_generator.h"
+
+int main() {
+  TRandom3 rng(2026);
+  std::vector<ParticleCand> candidates;
+  spawnEventWave(candidates, 25000, rng);
+
+  // Objeto en el heap administrado por ROOT -> usamos operador flecha
+  TH2D* h_phase = new TH2D("h_phase", "Espacio de Fase;p_{x} [GeV];p_{y} [GeV]",
+                           80, -5, 5, 80, -5, 5);
+
+  // const auto& evita copiar cada objeto ParticleCand en el bucle
+  for (const auto& cand : candidates) {
+    h_phase->Fill(cand.p4().Px(), cand.p4().Py());
+  }
+
+  TCanvas* c = new TCanvas("c", "Phase Space", 700, 600);
+  h_phase->Draw("COLZ");
+  c->SaveAs("s03_phase_space.pdf");
+  return 0;
+}`,
+        warmup: {
+          platform: "LeetCode",
+          problem: "1480. Running Sum of 1d Array / Kids With the Greatest Candies",
+          goal: "Recorrer un `std::vector<int>&` por referencia, mantener un acumulador y devolver un vector filtrado sin errores de índices.",
+          snippet: `void filterHighEnergy(const std::vector<double>& raw, std::vector<double>& out, double cut) {
+    for (double val : raw) {
+        if (val >= cut) out.push_back(val);
+    }
+}`
+        }
+      },
+      {
+        id: 4,
+        code: "S04",
+        week: 2,
+        nodeName: "ALGO_CUTS",
+        ipTag: "100.64.04.88",
+        duration: "70m",
+        status: "ONLINE",
+        title: "Diseño de Algoritmos, Cortes de Selección y Combinatoria",
+        subtitle: "Cómo escribir tus propios algoritmos de filtrado, ordenamiento con lambdas y emparejamiento O(N²) encima de los datos.",
+        metrics: { cpp: 90, root: 80, algo: 95, mem: 0 },
+        processes: ["std::sort + lambda", "selection_cuts()", "pair_combinatorics"],
+        objectives: [
+          "Construir pipelines de filtrado (*Selection Cuts*) limpios y modulares para separar señal de ruido de fondo.",
+          "Usar `<algorithm>` (`std::sort`, `std::copy_if`) con expresiones lambda para ordenar partículas por $p_T$ de mayor a menor en 3 líneas de código.",
+          "Programar bucles de combinatoria de pares sin doble conteo (`j = i + 1`) para reconstruir resonancias ($J/\\psi \\to \\mu^+\\mu^-$ o $Z^0$)."
+        ],
+        pairProtocol: "10m Warmup Two-Sum/Pares -> 15m Análisis de complejidad y doble conteo -> 45m Implementar el reconstructor de resonancias sobre ruido térmico y superponer histogramas en ROOT.",
+        instructorNote: {
+          title: "MECÁNICA OCULTA S04: CAZA DE SHINIES (ALTO pT) Y SÍNTESIS DE LEGENDARIOS",
+          body: "En el juego, la Ruta Salvaje está infestada de 95% de piones débiles (ruido de fondo). Primero él programa un filtro de 'IVs / Shiny' (quedarse solo con candidatos con `pt() > 2.0 GeV` y buena calidad de traza). Luego, con la lista limpia, programa el 'Altar de Fusión': emparejar todas las criaturas de carga `+1` con las `-1` (`j = i + 1`) para sintetizar el bosón legendario y ver cómo emerge el pico limpio en el histograma."
+        },
+        compileCmd: "g++ -std=c++17 s04_reconstruct.cxx $(root-config --cflags --libs) -o s04_reconstruct",
+        headerCode: `// engine/resonance_finder.h — Algoritmo de selección y combinatoria
+#pragma once
+#include <vector>
+#include <algorithm>
+#include "particle_mon.h"
+
+inline std::vector<ParticleCand> selectHighPt(const std::vector<ParticleCand>& raw, double min_pt) {
+  std::vector<ParticleCand> selected;
+  for (const auto& p : raw) {
+    if (p.pt() > min_pt) selected.push_back(p);
+  }
+  // Ordenar de mayor a menor pT usando una función lambda
+  std::sort(selected.begin(), selected.end(),
+            [](const ParticleCand& a, const ParticleCand& b) {
+              return a.pt() > b.pt();
+            });
+  return selected;
+}`,
+        implCode: `// s04_reconstruct.cxx — Combinatoria sin doble conteo (j = i + 1)
+#include <TH1D.h>
+#include "engine/resonance_finder.h"
+
+void reconstructResonances(const std::vector<ParticleCand>& raw, TH1D* h_sig) {
+  // 1. Aplicamos nuestro algoritmo de corte cinemático
+  auto clean = selectHighPt(raw, 1.8);
+
+  // 2. Bucle combinatorio O(N^2 / 2) buscando pares de carga opuesta
+  const size_t n = clean.size();
+  for (size_t i = 0; i < n; ++i) {
+    for (size_t j = i + 1; j < n; ++j) {
+      if (clean[i].charge() * clean[j].charge() < 0) {
+        double m_inv = clean[i].invariantMassWith(clean[j]);
+        h_sig->Fill(m_inv);
+      }
+    }
+  }
+}`,
+        warmup: {
+          platform: "LeetCode",
+          problem: "1. Two Sum / 167. Two Sum II (Input Array Is Sorted)",
+          goal: "Dominar la lógica de emparejar dos elementos de una colección que cumplen una condición de suma exacta evitando comparar un elemento consigo mismo.",
+          snippet: `// Patrón fundamental de combinatoria sin duplicados
+for (size_t i = 0; i < vec.size(); ++i) {
+    for (size_t j = i + 1; j < vec.size(); ++j) {
+        if (vec[i] + vec[j] == target) { /* par encontrado */ }
+    }
+}`
+        }
+      },
+      {
+        id: 5,
+        code: "S05",
+        week: 3,
+        nodeName: "TTREE_IO",
+        ipTag: "100.64.05.52",
+        duration: "70m",
+        status: "ONLINE",
+        title: "Persistencia en Archivos .root, TFile y Estructura de TTree",
+        subtitle: "Cómo funcionan las ramas (Branches), cómo se enlazan direcciones de memoria y cómo procesar cientos de miles de eventos.",
+        metrics: { cpp: 75, root: 95, algo: 75, mem: 0 },
+        processes: ["TFile::Open()", "tree->SetBranchAddress", "RDataFrame::Filter"],
+        objectives: [
+          "Comprender el modelo de datos de `TTree`: por qué `SetBranchAddress` pide la dirección (`&var`) de nuestras variables locales y cómo `GetEntry(i)` sobrescribe ese espacio en cada iteración.",
+          "Inspeccionar cualquier archivo `.root` desconocido con `tree->Print()` desde la terminal para ver sus columnas sin adivinar nombres.",
+          "Contrastar el bucle clásico de eventos con el enfoque moderno declarativo (`ROOT::RDataFrame`)."
+        ],
+        pairProtocol: "10m Warmup Estructuras -> 15m Diagrama de memoria de `SetBranchAddress` -> 45m Leer un archivo `.root` de 100k eventos, aplicar su clase analizadora y guardar los histogramas en un nuevo `TFile`.",
+        instructorNote: {
+          title: "MECÁNICA OCULTA S05: EL SAVEFILE (.ROOT) Y AUDITORÍA DE LA BATTLE TOWER",
+          body: "Le explicas que un archivo `.root` con un `TTree` es literalmente el archivo de guardado (Savefile / Replay Log) de la Torre de Batalla. Cada `GetEntry(i)` carga la partida del combate `i` en las variables conectadas. Él debe conectar sus variables al archivo `battle_tower_log.root`, auditar 100,000 turnos grabados y exportar los mejores resultados a su propio archivo `elite_hall.root`."
+        },
+        compileCmd: "g++ -std=c++17 s05_tree_reader.cxx $(root-config --cflags --libs) -o s05_tree_reader",
+        headerCode: `// engine/tree_inspector.h — Estructura puente para ramas de un TTree
+#pragma once
+#include <TTree.h>
+
+struct EventRecord {
+  int n_tracks;
+  float lead_pt;
+  float sublead_pt;
+  int pair_charge_prod;
+  float pair_mass;
+
+  void bindToTree(TTree* tree) {
+    // Conectamos cada columna del archivo .root a la dirección (&) en RAM
+    tree->SetBranchAddress("n_tracks", &n_tracks);
+    tree->SetBranchAddress("lead_pt", &lead_pt);
+    tree->SetBranchAddress("sublead_pt", &sublead_pt);
+    tree->SetBranchAddress("pair_charge_prod", &pair_charge_prod);
+    tree->SetBranchAddress("pair_mass", &pair_mass);
+  }
+};`,
+        implCode: `// s05_tree_reader.cxx — Lectura de TTree y escritura de resultados
+#include <TFile.h>
+#include <TTree.h>
+#include <TH1D.h>
+#include "engine/tree_inspector.h"
+
+int main() {
+  TFile* f_in = TFile::Open("collider_run2026.root", "READ");
+  TTree* tree = (TTree*)f_in->Get("Events");
+
+  EventRecord ev;
+  ev.bindToTree(tree);
+
+  TFile* f_out = TFile::Open("filtered_output.root", "RECREATE");
+  TH1D* h_z = new TH1D("h_z", "Reconstruccion Z0;M [GeV];Eventos", 80, 60, 120);
+
+  Long64_t n_entries = tree->GetEntries();
+  for (Long64_t i = 0; i < n_entries; ++i) {
+    tree->GetEntry(i); // Actualiza la estructura 'ev' en memoria
+    if (ev.pair_charge_prod < 0 && ev.lead_pt > 20.0 && ev.sublead_pt > 15.0) {
+      h_z->Fill(ev.pair_mass);
+    }
+  }
+
+  h_z->Write();
+  f_out->Close();
+  f_in->Close();
+  return 0;
+}`,
+        warmup: {
+          platform: "HackerRank / LeetCode",
+          problem: "Struct / 2D Matrix Row Filtering",
+          goal: "Practicar la agrupación de campos heterogéneos en un `struct` y la evaluación booleana rápida por fila.",
+          snippet: `struct Row { int id; float pt; int q; };
+bool passesTrigger(const Row& r) {
+    return (r.pt > 15.0f) && (r.q != 0);
+}`
+        }
+      },
+      {
+        id: 6,
+        code: "S06",
+        week: 3,
+        nodeName: "END_TO_END",
+        ipTag: "100.64.06.99",
+        duration: "75m",
+        status: "ONLINE",
+        title: "Proyecto Integrador: Pipeline Completo desde Cero",
+        subtitle: "Autonomía total: inspección de un dataset a ciegas, diseño del algoritmo, compilación y reporte multipanel.",
+        metrics: { cpp: 95, root: 95, algo: 95, mem: 0 },
+        processes: ["Makefile / build", "Blind TTree analysis", "TCanvas->SaveAs(PDF)"],
+        objectives: [
+          "Recibir un archivo `.root` desconocido sin código de plantilla previo e inspeccionar su estructura usando las herramientas vistas en el curso.",
+          "Diseñar y compilar un ejecutable modular en C++17 que implemente cortes de selección algorítmicos para aislar una señal escondida en el fondo.",
+          "Generar un reporte visual limpio en un `TCanvas` dividido (distribución de $p_T$, fondo vs señal cortada y pico de masa) listo para mostrar en una reunión de grupo."
+        ],
+        pairProtocol: "10m Revisión de requisitos del desafío -> 50m Él lidera el diseño, código y compilación de principio a fin (tú solo actúas como consultor senior si se traba) -> 15m Retrospectiva y plantilla lista para su trabajo diario.",
+        instructorNote: {
+          title: "MECÁNICA OCULTA S06: ENCUENTRO CON EL LEGENDARIO OCULTO (MYSTERY DUNGEON)",
+          body: "El cierre perfecto del curso: le entregas `unknown_sector.root`. Adentro inyectaste 200,000 eventos de fondo exponencial y un pequeño pico estrecho (la partícula 'Legendaria' del curso) que solo es visible si aplica un corte combinado de asimetría de momento y carga opuesta. Cuando logra compilar su código y ve emerger el pico limpio en el PDF, habrá dominado el flujo completo."
+        },
+        compileCmd: "make all && ./run_blind_search unknown_sector.root report_final.pdf",
+        headerCode: `// Makefile — Entorno profesional autónomo que se lleva para su trabajo
+CXX      := g++
+CXXFLAGS := -std=c++17 -O2 -Wall $(shell root-config --cflags)
+LDFLAGS  := $(shell root-config --libs)
+
+TARGET   := run_blind_search
+SRCS     := main_search.cxx
+
+all: $(TARGET)
+
+$(TARGET): $(SRCS)
+\t$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+
+clean:
+\trm -f $(TARGET) *.pdf`,
+        implCode: `// main_search.cxx — Esqueleto del pipeline autónomo final
+#include <iostream>
+#include <TFile.h>
+#include <TTree.h>
+#include <TH1D.h>
+#include <TCanvas.h>
+
+int main(int argc, char** argv) {
+  const char* input_path = (argc > 1) ? argv[1] : "unknown_sector.root";
+  std::cout << "[PIPELINE_START] Analizando dataset: " << input_path << "\\n";
+
+  // 1. Abrir TFile e inspeccionar TTree
+  // 2. Enlazar ramas y ejecutar algoritmo de filtrado propio
+  // 3. Exportar TCanvas multipanel en PDF y .root de salida
+  std::cout << "[PIPELINE_OK] Reporte generado sin errores.\\n";
+  return 0;
+}`,
+        warmup: {
+          platform: "Diagnóstico en Vivo",
+          problem: "Diseño de Arquitectura del Pipeline en 10 Minutos",
+          goal: "Antes de tocar el teclado, escribir en comentarios los 4 pasos exactos de entrada, estructura en memoria, corte algorítmico y salida.",
+          snippet: `// 1. Input:  TFile::Open -> TTree->Print()
+// 2. State:  struct Candidate / std::vector<Candidate>
+// 3. Algo:   Filter(pt > cut) + Pair Combinatorics
+// 4. Output: TCanvas(2,1) -> SaveAs("discovery.pdf")`
+        }
+      }
+    ];
+
+    /********************************************************************
+     * 2. APPLICATION STATE
+     ********************************************************************/
+    let state = {
+      selectedSessionId: 1,
+      activeCodeTab: 'HEADER', // 'HEADER' | 'IMPL' | 'WARMUP'
+      instructorMode: false,
+      weekFilter: 'ALL',
+      cutsApplied: false,
+      simRunning: false,
+      simProgress: 1.0,
+      batchCount: 1
+    };
+
+    /********************************************************************
+     * 3. INITIALIZATION & UI RENDERING
+     ********************************************************************/
+    window.addEventListener('DOMContentLoaded', () => {
+      renderTopologyNodes();
+      renderWarmupsMatrix();
+      selectSession(1, false);
+      updateClock();
+      setInterval(updateClock, 1000);
+
+      // Initialize Logs
+      appendLog("INFO", "observatory_ui initialized (light e-ink mode)");
+      appendLog("LSP", "syllabus: ejemplos de cabeceras; no se ha detectado ROOT");
+      appendLog("SYNC", "loaded 6-session pair-programming syllabus");
+
+      // Draw SVG topology connectors on load and resize
+      setTimeout(drawTopologyConnectors, 60);
+      window.addEventListener('resize', drawTopologyConnectors);
+
+      // Start Kinematic Ink Animation Loop
+      if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) requestAnimationFrame(animateKinematicInk);
+
+      // Keyboard shortcuts
+      window.addEventListener('keydown', (e) => {
+        if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+        if (e.key >= '1' && e.key <= '6') {
+          selectSession(parseInt(e.key, 10));
+        } else if (e.key.toLowerCase() === 'i') {
+          toggleInstructorMode();
+        } else if (e.key.toLowerCase() === 'r') {
+          runColliderBatch();
+        }
+      });
+    });
+
+    function updateClock() {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}  ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      const el = document.getElementById('clockDate');
+      if (el) el.textContent = dateStr;
+    }
+
+    /********************************************************************
+     * 4. RENDER TOPOLOGY NODES (BESZEL HUB STYLE)
+     ********************************************************************/
+    function renderTopologyNodes() {
+      const leftCol = document.getElementById('leftNodesCol');
+      const rightCol = document.getElementById('rightNodesCol');
+      leftCol.innerHTML = '';
+      rightCol.innerHTML = '';
+
+      SESSIONS.forEach((s) => {
+        const isFilteredOut = state.weekFilter !== 'ALL' && s.week !== state.weekFilter;
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.style.textAlign = 'left';
+        card.style.font = 'inherit';
+        card.style.width = '100%';
+        card.id = `topo-node-${s.id}`;
+        card.className = `topo-node ${s.id === state.selectedSessionId ? 'selected' : ''} ${isFilteredOut ? 'opacity-35' : ''}`;
+        card.onclick = () => selectSession(s.id);
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between b-faint-b pb-1.5 mb-2">
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-xs">${s.code}: ${s.nodeName}</span>
+              <span class="text-[10.5px] text-zinc-400">[ WK_0${s.week} ]</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10.5px] text-emerald-600 font-semibold">${s.status}</span>
+              <span class="status-dot"></span>
+            </div>
+          </div>
+
+          <div class="text-xs font-semibold text-zinc-900 mb-2 leading-snug">
+            ${s.title}
+          </div>
+
+          <div class="grid grid-cols-[42px_34px_1fr_72px] items-center gap-2 text-[11px] text-zinc-600 mb-1">
+            <span>CPP</span>
+            <span>${s.metrics.cpp}%</span>
+            <canvas id="node-wave-${s.id}" width="90" height="12" class="w-full h-[12px] block"></canvas>
+            <div class="meter-track"><div class="meter-fill" style="width:${s.metrics.cpp}%"></div></div>
+          </div>
+
+          <div class="grid grid-cols-[42px_34px_1fr_72px] items-center gap-2 text-[11px] text-zinc-600 mb-2">
+            <span>ROOT</span>
+            <span>${s.metrics.root}%</span>
+            <span class="text-[10px] text-zinc-400 truncate">dur: ${s.duration}</span>
+            <div class="meter-track"><div class="meter-fill" style="width:${s.metrics.root}%"></div></div>
+          </div>
+
+          <div class="b-faint-t pt-1.5 text-[11px] text-zinc-600 space-y-0.5">
+            ${s.processes.map(p => `<div>&gt; <span class="text-zinc-800">${p}</span></div>`).join('')}
+          </div>
+
+          <div class="instructor-layer">
+            <div class="font-bold text-amber-800 text-[10.5px]">${s.instructorNote.title}</div>
+            <div class="mt-0.5 leading-snug">${s.instructorNote.body}</div>
+          </div>
+        `;
+
+        if (s.id % 2 === 1) {
+          leftCol.appendChild(card);
+        } else {
+          rightCol.appendChild(card);
+        }
+      });
+
+      setTimeout(drawTopologyConnectors, 30);
+    }
+
+    /********************************************************************
+     * 5. DRAW ORTHOGONAL SVG CONNECTORS BETWEEN HUB AND NODES
+     ********************************************************************/
+    function drawTopologyConnectors() {
+      const svg = document.getElementById('topoSvg');
+      const wrapper = document.getElementById('topologyWrapper');
+      const hub = document.getElementById('centralHubBox');
+      if (!svg || !wrapper || !hub || window.innerWidth < 1024) {
+        if (svg) svg.innerHTML = '';
+        return;
+      }
+
+      const wrapRect = wrapper.getBoundingClientRect();
+      const hubRect = hub.getBoundingClientRect();
+      const hubCenterY = hubRect.top - wrapRect.top + hubRect.height / 2;
+      const hubLeftX = hubRect.left - wrapRect.left;
+      const hubRightX = hubRect.right - wrapRect.left;
+
+      let pathsHtml = '';
+
+      SESSIONS.forEach((s) => {
+        const nodeEl = document.getElementById(`topo-node-${s.id}`);
+        if (!nodeEl) return;
+        const nRect = nodeEl.getBoundingClientRect();
+        const isLeft = s.id % 2 === 1;
+        const isSelected = s.id === state.selectedSessionId;
+
+        const startX = isLeft ? hubLeftX : hubRightX;
+        const startY = hubCenterY;
+        const endX = isLeft ? (nRect.right - wrapRect.left) : (nRect.left - wrapRect.left);
+        const endY = nRect.top - wrapRect.top + nRect.height / 2;
+        const midX = (startX + endX) / 2;
+
+        const strokeColor = isSelected ? '#0284c7' : '#71717a';
+        const strokeWidth = isSelected ? '1.6' : '1';
+
+        const d = `M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}`;
+        pathsHtml += `<path d="${d}" fill="none" stroke="${strokeColor}" stroke-width="${strokeWidth}" />`;
+        // Connection square ports
+        pathsHtml += `<rect x="${startX - 2.5}" y="${startY - 2.5}" width="5" height="5" fill="#0284c7" />`;
+        pathsHtml += `<rect x="${endX - 2.5}" y="${endY - 2.5}" width="5" height="5" fill="${isSelected ? '#0284c7' : '#27272a'}" />`;
+      });
+
+      svg.innerHTML = pathsHtml;
+    }
+
+    /********************************************************************
+     * 6. SELECT & INSPECT A SESSION
+     ********************************************************************/
+    function selectSession(id, logEvent = true) {
+      state.selectedSessionId = id;
+      const session = SESSIONS.find(s => s.id === id);
+      if (!session) return;
+
+      // Update topology card highlight
+      SESSIONS.forEach(s => {
+        const el = document.getElementById(`topo-node-${s.id}`);
+        if (el) el.classList.toggle('selected', s.id === id);
+        const qBtn = document.getElementById(`quick-s${s.id}`);
+        if (qBtn) qBtn.classList.toggle('active-mode', s.id === id);
+      });
+
+      drawTopologyConnectors();
+
+      // Render detailed session card
+      const detailCard = document.getElementById('sessionDetailCard');
+      detailCard.innerHTML = `
+        <div>
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-3 b-faint-b">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="px-1.5 py-0.5 bg-zinc-900 text-white font-bold text-xs">${session.code}</span>
+                <span class="text-xs font-bold tracking-wide text-sky-700">SEMANA 0${session.week} // ${session.nodeName}</span>
+                <span class="text-[11px] text-zinc-400">[ ${session.ipTag} ]</span>
+              </div>
+              <h2 class="font-bold text-sm sm:text-base mt-1 text-zinc-900">${session.title}</h2>
+            </div>
+            <div class="text-right text-xs">
+              <div class="text-emerald-600 font-semibold">● SESSION_READY</div>
+              <div class="text-zinc-500">Duración: ${session.duration}</div>
+            </div>
+          </div>
+
+          <p class="mt-3 text-xs text-zinc-600 leading-relaxed">
+            ${session.subtitle}
+          </p>
+
+          <div class="mt-4">
+            <div class="text-[11px] font-bold tracking-wider uppercase text-zinc-500 mb-2">
+              OBJETIVOS TÉCNICOS Y PRÁCTICOS (C++17 &amp; CERN ROOT)
+            </div>
+            <ul class="space-y-2 text-xs text-zinc-800">
+              ${session.objectives.map(obj => `
+                <li class="flex items-start gap-2">
+                  <span class="text-sky-600 font-bold mt-0.5">&gt;</span>
+                  <span>${obj}</span>
+                </li>
+              `).join('')}
+            </ul>
+          </div>
+
+          <div class="mt-4 p-3 border border-zinc-200 bg-[#fbfbfa] text-xs">
+            <div class="font-bold text-zinc-900 mb-1 flex items-center justify-between">
+              <span>PROTOCOLO DE PAIR PROGRAMMING (CERO CLASE PASIVA)</span>
+              <span class="text-[10.5px] text-sky-700">DRIVER: ALUMNO // NAVIGATOR: TÚ</span>
+            </div>
+            <p class="text-zinc-600 leading-relaxed">${session.pairProtocol}</p>
+          </div>
+
+          <!-- Hidden Instructor Layer inside Detail Inspector -->
+          <div class="instructor-layer">
+            <div class="font-bold text-amber-900 mb-1">${session.instructorNote.title}</div>
+            <p class="leading-relaxed">${session.instructorNote.body}</p>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-3 b-faint-t flex flex-wrap items-center justify-between gap-2 text-[11px]">
+          <div class="flex items-center gap-2">
+            <span class="text-zinc-500">WARMUP ASOCIADO:</span>
+            <span class="font-semibold text-zinc-900">${session.warmup.platform} — ${session.warmup.problem}</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            ${id > 1 ? `<button onclick="selectSession(${id - 1})" class="tech-btn">&larr; PREV</button>` : ''}
+            ${id < 6 ? `<button onclick="selectSession(${id + 1})" class="tech-btn">NEXT &rarr;</button>` : ''}
+          </div>
+        </div>
+      `;
+
+      // Update Code Panel
+      updateCodeWorkbench();
+
+      // Update Bottom Telemetry Bars
+      document.getElementById('sysNodeTag').textContent = `${session.code}_ACTIVE`;
+      document.getElementById('barCpp').style.width = `${session.metrics.cpp}%`;
+      document.getElementById('valCpp').textContent = `${session.metrics.cpp}%`;
+      document.getElementById('barRoot').style.width = `${session.metrics.root}%`;
+      document.getElementById('valRoot').textContent = `${session.metrics.root}%`;
+      document.getElementById('barAlgo').style.width = `${session.metrics.algo}%`;
+      document.getElementById('valAlgo').textContent = `${session.metrics.algo}%`;
+
+      if (logEvent) {
+        appendLog("INFO", `inspected node ${session.code} (${session.nodeName})`);
+      }
+    }
+
+    /********************************************************************
+     * 7. CODE WORKBENCH & CLIPBOARD
+     ********************************************************************/
+    function switchCodeTab(tab) {
+      state.activeCodeTab = tab;
+      ['HEADER', 'IMPL', 'WARMUP'].forEach(t => {
+        const btn = document.getElementById(`tabBtn-${t}`);
+        if (btn) btn.classList.toggle('active-mode', t === tab);
+      });
+      updateCodeWorkbench();
+    }
+
+    function updateCodeWorkbench() {
+      const session = SESSIONS.find(s => s.id === state.selectedSessionId);
+      if (!session) return;
+
+      document.getElementById('codePanelTitle').textContent = `ARTIFACT_INSPECTOR // ${session.code}`;
+      document.getElementById('compileCmdText').textContent = session.compileCmd;
+
+      const display = document.getElementById('codeDisplayArea');
+      if (state.activeCodeTab === 'HEADER') {
+        display.textContent = session.headerCode;
+      } else if (state.activeCodeTab === 'IMPL') {
+        display.textContent = session.implCode;
+      } else {
+        display.textContent = `// PLATAFORMA: ${session.warmup.platform}\n// PROBLEMA:   ${session.warmup.problem}\n// OBJETIVO:   ${session.warmup.goal}\n\n${session.warmup.snippet}`;
+      }
+    }
+
+    function copyActiveCode() {
+      const display = document.getElementById('codeDisplayArea');
+      const textArea = document.createElement('textarea');
+      textArea.value = display.textContent;
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        const btn = document.getElementById('btnCopyCode');
+        btn.textContent = 'COPIED!';
+        appendLog("SYNC", `copied ${state.activeCodeTab} snippet from S0${state.selectedSessionId}`);
+        setTimeout(() => { btn.textContent = 'COPY'; }, 1400);
+      } catch (err) {
+        appendLog("WARN", "clipboard copy fallback triggered");
+      }
+      document.body.removeChild(textArea);
+    }
+
+    /********************************************************************
+     * 8. INSTRUCTOR NOTES MODE TOGGLE (PARTICLE-MON LAYER)
+     ********************************************************************/
+    function toggleInstructorMode() {
+      state.instructorMode = !state.instructorMode;
+      document.body.classList.toggle('instructor-on', state.instructorMode);
+
+      const btn = document.getElementById('btnInstructor');
+      const label = document.getElementById('instructorLabel');
+      const dot = document.getElementById('instructorDot');
+      const srvInd = document.getElementById('srvHarnessIndicator');
+      const srvState = document.getElementById('srvHarnessState');
+
+      if (state.instructorMode) {
+        btn.classList.add('amber-mode');
+        label.textContent = '[ INSTRUCTOR_NOTES: ON ]';
+        dot.className = 'w-2 h-2 bg-amber-600 inline-block';
+        srvInd.innerHTML = '[<span class="status-dot amber mx-0.5"></span>]';
+        srvState.textContent = 'exposed';
+        srvState.className = 'text-amber-700 font-semibold';
+        appendLog("WARN", "instructor layer ON: Particle-Mon harness architecture visible");
+      } else {
+        btn.classList.remove('amber-mode');
+        label.textContent = '[ INSTRUCTOR_NOTES: OFF ]';
+        dot.className = 'w-2 h-2 bg-zinc-400 inline-block';
+        srvInd.innerHTML = '[<span class="status-dot hollow mx-0.5"></span>]';
+        srvState.textContent = 'stealth';
+        srvState.className = 'text-zinc-400';
+        appendLog("INFO", "instructor layer OFF: clean technical view restored");
+      }
+
+      setTimeout(drawTopologyConnectors, 40);
+    }
+
+    /********************************************************************
+     * 9. NAVIGATION & WEEK FILTERING
+     ********************************************************************/
+    function setView(viewName) {
+      document.querySelectorAll('#sidebarNav .nav-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === viewName);
+      });
+
+      const topoSec = document.getElementById('sectionTopology');
+      const inspSec = document.getElementById('sectionInspector');
+      const warmSec = document.getElementById('sectionWarmupsMatrix');
+
+      topoSec.classList.remove('hidden');
+      inspSec.classList.remove('hidden');
+      warmSec.classList.add('hidden');
+
+      if (viewName === 'OVERVIEW' || viewName === 'TOPOLOGY') {
+        filterWeek('ALL');
+      } else if (viewName === 'WK_01') {
+        filterWeek(1);
+        selectSession(1);
+      } else if (viewName === 'WK_02') {
+        filterWeek(2);
+        selectSession(3);
+      } else if (viewName === 'WK_03') {
+        filterWeek(3);
+        selectSession(5);
+      } else if (viewName === 'WARMUPS') {
+        topoSec.classList.add('hidden');
+        warmSec.classList.remove('hidden');
+        appendLog("INFO", "opened 6x10m HackerRank/LeetCode drill matrix");
+      } else if (viewName === 'HARNESS') {
+        document.getElementById('sectionInspector').scrollIntoView({ behavior: 'smooth' });
+        switchCodeTab('HEADER');
+        appendLog("LSP", "focused C++17 / ROOT header inspector");
+      }
+
+      setTimeout(drawTopologyConnectors, 50);
+    }
+
+    function filterWeek(wk) {
+      state.weekFilter = wk;
+      ['ALL', 1, 2, 3].forEach(k => {
+        const b = document.getElementById(`flt-${k}`);
+        if (b) b.classList.toggle('active-mode', k === wk);
+      });
+      renderTopologyNodes();
+    }
+
+    function renderWarmupsMatrix() {
+      const grid = document.getElementById('warmupCardsGrid');
+      grid.innerHTML = SESSIONS.map(s => `
+        <div class="border border-zinc-800 p-3.5 bg-[#fbfbfa] flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center b-faint-b pb-1.5 mb-2">
+              <span class="font-bold text-xs">${s.code} // SEMANA 0${s.week}</span>
+              <span class="text-[10.5px] px-1.5 py-0.5 bg-sky-100 text-sky-800 font-semibold">${s.warmup.platform}</span>
+            </div>
+            <div class="font-bold text-xs text-zinc-900 mb-1">${s.warmup.problem}</div>
+            <p class="text-[11.5px] text-zinc-600 mb-3">${s.warmup.goal}</p>
+          </div>
+          <div>
+            <pre class="code-view text-[10.5px] p-2">${s.warmup.snippet}</pre>
+            <button onclick="selectSession(${s.id}); setView('OVERVIEW');" class="tech-btn w-full justify-center mt-2.5">
+              ABRIR CONEXIÓN CON ROOT EN ${s.code}
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    /********************************************************************
+     * 10. KINEMATIC INK ANIMATION ENGINE (OSCILLOSCOPES & TH1D CANVAS)
+     ********************************************************************/
+    let phase = 0;
+
+    // Pre-computed histogram bins for raw vs cut invariant mass
+    const N_BINS = 36;
+    let currentBins = new Array(N_BINS).fill(0);
+    let targetBins = new Array(N_BINS).fill(0);
+
+    function computeTargetHistogram(applyCuts) {
+      for (let i = 0; i < N_BINS; i++) {
+        const x = i / N_BINS; // 0 to 1
+        // Exponential pion noise background
+        const bg = applyCuts
+          ? 0.12 * Math.exp(-3.2 * x)
+          : 0.78 * Math.exp(-2.4 * x);
+        // Gaussian resonance peak around bin 20 (J/psi or Z0)
+        const dist = (i - 21) / 2.3;
+        const signal = 0.72 * Math.exp(-0.5 * dist * dist);
+        const jitter = (Math.random() - 0.5) * 0.04;
+        targetBins[i] = Math.max(0.03, Math.min(0.95, bg + signal + jitter));
+      }
+    }
+    computeTargetHistogram(false);
+    for (let i = 0; i < N_BINS; i++) currentBins[i] = targetBins[i];
+
+    function toggleSelectionCuts() {
+      state.cutsApplied = !state.cutsApplied;
+      const btn = document.getElementById('btnToggleCuts');
+      const peakLbl = document.getElementById('histPeakLabel');
+      const statusTxt = document.getElementById('histStatusText');
+
+      computeTargetHistogram(state.cutsApplied);
+
+      if (state.cutsApplied) {
+        btn.textContent = 'CUTS: ON (pT>2.0)';
+        btn.className = 'border border-sky-700 bg-sky-100 text-sky-900 font-semibold px-1.5 py-0.2 text-[10px]';
+        peakLbl.textContent = '↑ S/B: 8.94 σ';
+        peakLbl.className = 'text-emerald-600 font-semibold';
+        statusTxt.textContent = 'filtered: clean resonance peak';
+        appendLog("INFO", "applied selection cuts (pT > 2.0 GeV, q1*q2 < 0): background suppressed");
+      } else {
+        btn.textContent = 'CUTS: OFF';
+        btn.className = 'border border-zinc-700 px-1.5 py-0.2 text-[10px] hover:bg-sky-100';
+        peakLbl.textContent = '↑ S/B ilustrativo: 1.42';
+        peakLbl.className = 'text-zinc-600';
+        statusTxt.textContent = 'raw pion bg + resonance';
+        appendLog("INFO", "selection cuts disabled: showing raw inclusive distribution");
+      }
+    }
+
+    function runColliderBatch() {
+      state.batchCount++;
+      computeTargetHistogram(state.cutsApplied);
+      // Perturb current bins to animate filling from zero
+      for (let i = 0; i < N_BINS; i++) {
+        currentBins[i] = 0.02;
+      }
+      const evCount = (50000 * state.batchCount).toLocaleString();
+      document.getElementById('histEventsLabel').textContent = `↓ ${evCount} evts`;
+      appendLog("SYNC", `collider batch #${state.batchCount} finished (${evCount} events -> TH1D::Fill)`);
+    }
+
+    function drawSparkline(canvasId, freq, amp, offsetPhase) {
+      const c = document.getElementById(canvasId);
+      if (!c) return;
+      const ctx = c.getContext('2d');
+      const w = c.width;
+      const h = c.height;
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.beginPath();
+      ctx.strokeStyle = '#27272a';
+      ctx.lineWidth = 1.15;
+
+      for (let x = 0; x < w; x += 2) {
+        const pulse = Math.sin((x * freq) - phase + offsetPhase) * amp;
+        const spike = (x % 22 === 0) ? Math.cos(phase * 2 + x) * (amp * 1.4) : 0;
+        const y = h / 2 + pulse + spike;
+        if (x === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    function drawTH1DCanvas() {
+      const c = document.getElementById('th1dCanvas');
+      if (!c) return;
+      const rect = c.parentElement.getBoundingClientRect();
+      if (c.width !== Math.floor(rect.width) || c.height !== Math.floor(rect.height)) {
+        c.width = Math.floor(rect.width);
+        c.height = Math.floor(rect.height);
+      }
+
+      const ctx = c.getContext('2d');
+      const w = c.width;
+      const h = c.height;
+      ctx.clearRect(0, 0, w, h);
+
+      // Subtle grid lines
+      ctx.strokeStyle = '#e4e4e7';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, h * 0.5); ctx.lineTo(w, h * 0.5);
+      ctx.moveTo(w * 0.58, 0); ctx.lineTo(w * 0.58, h);
+      ctx.stroke();
+
+      // Smoothly interpolate currentBins toward targetBins
+      const binW = w / N_BINS;
+      ctx.beginPath();
+      ctx.strokeStyle = state.cutsApplied ? '#0284c7' : '#18181b';
+      ctx.lineWidth = 1.35;
+
+      ctx.moveTo(0, h);
+      for (let i = 0; i < N_BINS; i++) {
+        currentBins[i] += (targetBins[i] - currentBins[i]) * 0.12;
+        const val = currentBins[i] + Math.sin(phase * 1.5 + i) * 0.008;
+        const y = h - Math.max(2, val * (h - 8));
+        const x1 = i * binW;
+        const x2 = (i + 1) * binW;
+        ctx.lineTo(x1, y);
+        ctx.lineTo(x2, y);
+      }
+      ctx.lineTo(w, h);
+      ctx.stroke();
+
+      // Light fill under step-plot
+      ctx.fillStyle = state.cutsApplied ? 'rgba(2, 132, 199, 0.10)' : 'rgba(24, 24, 27, 0.05)';
+      ctx.fill();
+    }
+
+    function animateKinematicInk() {
+      phase += 0.065;
+
+      // Node waveforms
+      for (let i = 1; i <= 6; i++) {
+        drawSparkline(`node-wave-${i}`, 0.14 + i * 0.01, 2.5, i * 1.3);
+      }
+
+      // Central Hub waveform
+      const hubC = document.getElementById('hubWaveCanvas');
+      if (hubC) {
+        hubC.width = hubC.clientWidth || 160;
+        hubC.height = hubC.clientHeight || 22;
+        drawSparkline('hubWaveCanvas', 0.12, 4.5, 0.5);
+      }
+
+      // Bottom Telemetry sparklines
+      drawSparkline('sparkCpp', 0.16, 2.8, 1.0);
+      drawSparkline('sparkRoot', 0.13, 3.0, 2.2);
+      drawSparkline('sparkAlgo', 0.19, 2.6, 3.4);
+      drawSparkline('sparkMem', 0.05, 0.3, 0.0); // flat 0% memorization line
+
+      // JavaScript demonstration plot (not ROOT)
+      drawTH1DCanvas();
+
+      if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) requestAnimationFrame(animateKinematicInk);
+    }
+
+    /********************************************************************
+     * 11. STDOUT LOG PANEL
+     ********************************************************************/
+    function appendLog(type, message) {
+      const container = document.getElementById('logContainer');
+      if (!container) return;
+
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
+      let badgeColor = 'text-emerald-600';
+      if (type === 'SYNC' || type === 'LSP') badgeColor = 'text-sky-600';
+      if (type === 'WARN') badgeColor = 'text-amber-600';
+
+      const line = document.createElement('div');
+      line.className = 'grid grid-cols-[54px_46px_1fr] gap-1.5 items-baseline leading-tight';
+      line.innerHTML = `
+        <span class="text-zinc-400">${timeStr}</span>
+        <span class="${badgeColor} font-semibold">[${type}]</span>
+        <span class="text-zinc-800 truncate" title="${message}">${message}</span>
+      `;
+
+      container.prepend(line);
+      while (container.children.length > 14) {
+        container.removeChild(container.lastChild);
+      }
+    }
+
+    function clearLogs() {
+      const container = document.getElementById('logContainer');
+      if (container) container.innerHTML = '';
+      appendLog("INFO", "stdout buffer cleared");
+    }
+  </script>
+<script src="syllabus-course.js"></script>
+</body>
+</html>

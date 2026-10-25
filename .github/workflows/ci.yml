@@ -1,0 +1,49 @@
+name: Course checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 -m unittest discover -s tests -v
+      - run: node --test tests/progress.test.mjs
+      - name: Verify a real breakpoint and local variables
+        run: |
+          gdb -batch -ex 'break student::move' -ex 'run --check --student ci' -ex 'info args' -ex 'print player.x' build/level01/game > build/gdb-proof.txt
+          cat build/gdb-proof.txt
+          grep -q 'Breakpoint 1,' build/gdb-proof.txt
+          grep -q 'player =' build/gdb-proof.txt
+      - run: python3 course.py pack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cpp-root-course-source
+          path: dist/*.zip
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-gdb mingw-w64-ucrt-x86_64-python
+      - run: python -m unittest discover -s tests -v
+  root:
+    runs-on: ubuntu-latest
+    container: rootproject/root:6.32.02-ubuntu22.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Generate and analyze all six levels with real ROOT
+        shell: bash
+        run: |
+          for level in 1 2 3 4 5 6; do
+            python3 course.py batch "$level" --demo --events 200
+            root -l -b -q "analysis/s0${level}.C"
+          done
+          test -s output/course.root
+          test -s output/report.pdf

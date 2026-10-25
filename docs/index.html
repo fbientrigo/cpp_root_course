@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Seis sesiones prácticas de C++ y CERN ROOT. Programación en pareja y un juego de partículas en tu terminal.">
+  <title>ROOT Quest / Observatorio de C++</title>
+  <link rel="stylesheet" href="course.css"><script type="module" src="course.mjs"></script>
+</head>
+<body>
+<a class="skip" href="#main">Saltar al contenido</a>
+<header class="topbar"><a class="brand" href="./"><span class="mark">◧</span> ROOT QUEST <span class="muted">/ OBSERVATORY</span></a><div class="top-actions"><button id="sound" aria-pressed="false">SONIDO: OFF</button><a href="https://github.com/fbientrigo/cpp_root_course">GITHUB ↗</a></div></header>
+<div class="layout">
+<aside>
+  <p class="eyebrow">MESA DE TRABAJO</p>
+  <nav aria-label="Curso"><a class="nav active" href="./">▸ MI RECORRIDO</a><a class="nav" href="syllabus.html">▸ SYLLABUS COMPLETO ↗</a><a class="nav" href="#setup">▸ INSTALACIÓN</a><a class="nav" href="#achievements">▸ LOGROS</a></nav>
+  <section class="profile"><label for="student">PERFIL LOCAL</label><select id="student" aria-label="Estudiante activo"></select><form id="profileForm"><label for="newStudent">Agregar estudiante</label><div class="row"><input id="newStudent" maxlength="32" placeholder="alias_sin_espacios" pattern="[A-Za-z0-9_-]{1,32}" required autocomplete="off"><button type="submit" aria-label="Crear perfil">+</button></div></form>
+  <p>Guardado en este navegador. Sin cuentas ni sincronización automática.</p><button id="export">EXPORTAR PROGRESO ↓</button><label class="button" for="import">IMPORTAR PROGRESO ↑</label><input id="import" type="file" accept=".json,application/json" class="file-input"><p>Importa también <code>.course/tu_alias/progress.json</code> del juego.</p></section>
+  <p class="aside-footer">observar → predecir → programar<br><br>C++17 / ROOT 6<br>6 sesiones / 3 semanas</p>
+</aside>
+<main id="main">
+  <div class="intro"><div><p class="eyebrow">C++ / DATOS / PROGRAMACIÓN EN PAREJA</p><h1>Construye el modelo.<br>Observa la consecuencia.</h1><p>Un juego de partículas en la terminal. Seis sesiones para aprender a diseñar objetos, transformar datos y analizar con CERN ROOT.</p></div><a class="button primary" href="https://github.com/fbientrigo/cpp_root_course/archive/refs/heads/main.zip">DESCARGAR CURSO .ZIP ↓</a></div>
+  <div class="statusbar"><span><span class="dot"></span> <span id="saveState">GUARDADO LOCAL</span></span><span id="completion">0 / 18 pasos</span><progress id="progressBar" max="18" value="0" aria-label="Pasos completados"></progress></div>
+  <p id="notice" role="status" aria-live="polite">Tu progreso se guarda al marcar cada paso. Exporta una copia para cambiar de equipo.</p>
+  <div class="workspace">
+    <section aria-labelledby="pathTitle"><div class="panel-heading"><h2 id="pathTitle">RECORRIDO / 6 SESIONES</h2><span>SELECCIONA UN NIVEL</span></div><div id="sessions" class="sessions"></div></section>
+    <section class="inspector" aria-labelledby="lessonTitle"><div class="panel-heading"><h2>INSPECTOR DE SESIÓN</h2><span id="sessionTag">S01</span></div><div class="panel-body"><p class="eyebrow" id="lessonWeek"></p><h2 id="lessonTitle"></h2><p id="lessonGoal"></p><div class="mission"><span class="eyebrow">CONSTRUCCIÓN EN PAREJA / 20 MIN</span><p id="lessonPair"></p><code id="lessonFile"></code></div><div class="mission"><span class="eyebrow">EXPLORACIÓN EN ROOT / 20 MIN</span><p id="lessonRoot"></p></div><fieldset><legend>MI SEGUIMIENTO <span class="muted">/ AUTODECLARADO</span></legend><label><input type="checkbox" id="prepare"> Preparé el entorno y el calentamiento.</label><label><input type="checkbox" id="pair"> Implementé y puedo explicar el cambio.</label><label><input type="checkbox" id="root"> Hice el análisis y expliqué el resultado.</label></fieldset><div class="command"><span>COMPILAR Y TRABAJAR</span><pre id="lessonCommand"></pre><button id="copy">COPIAR</button></div><details><summary>Antes de tocar el código</summary><p id="lessonPredict"></p></details></div></section>
+  </div>
+  <section id="setup" class="setup"><div class="panel-heading"><h2>DE LA DESCARGA AL BREAKPOINT</h2><span>SIN DEPENDENCIAS DEL JUEGO</span></div><div class="setup-grid"><div><h3>01 / Preparar una vez</h3><p>Recomendado: Ubuntu o Windows con WSL2. Requiere GCC/Clang y Python 3.8+. ROOT se usa aparte.</p><pre>sudo apt update
+sudo apt install g++ gdb python3 git
+code .</pre><p>Windows nativo: MSYS2 UCRT64. <a href="https://github.com/fbientrigo/cpp_root_course#instalación">Instrucciones completas ↗</a></p></div><div><h3>02 / Ver y modificar</h3><pre>bash course.sh doctor
+bash course.sh demo 1 --sound
+bash course.sh play 1 --student mi_alias</pre><p>La demo muestra la referencia funcional. El taller ejecuta tu código y acredita sus comprobaciones.</p></div><div><h3>03 / Inspeccionar</h3><p>En VS Code, abre la carpeta del curso. Pon un breakpoint en el archivo del nivel y pulsa <kbd>F5</kbd>. Selecciona el nivel una sola vez; se compila y se prepara el depurador.</p><p><code>--step</code> permite avanzar con una acción + Enter. Mira variables, referencias y contenedores.</p><p>PowerShell: <code>python course.py play 1</code>. Los comandos son los mismos.</p></div></div></section>
+  <section id="achievements"><div class="panel-heading"><h2>REGISTRO DE LOGROS</h2><span>IMPORTADOS DEL JUEGO</span></div><p class="muted achievement-help">Los pasos del curso son tu seguimiento. Los logros se obtienen al jugar o pasar las comprobaciones y luego importar el progreso. La demo no otorga logros.</p><div id="badges" class="badges"></div></section>
+  <footer><span>ROOT QUEST / C++17 / CERN ROOT</span><span>Datos sintéticos. Combate y captura son reglas lúdicas.</span></footer>
+</main></div>
+</body></html>

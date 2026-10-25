@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0",
+  "tasks": [{
+    "label": "Curso: compilar nivel",
+    "type": "process",
+    "command": "python3",
+    "windows": {"command": "python"},
+    "args": ["${workspaceFolder}/course.py", "build", "${input:level}", "--debug-active"],
+    "options": {"cwd": "${workspaceFolder}"},
+    "group": {"kind": "build", "isDefault": true},
+    "problemMatcher": ["$gcc"]
+  }],
+  "inputs": [{"id":"level","type":"pickString","description":"Nivel a compilar","options":["1","2","3","4","5","6"],"default":"1"}]
+}
