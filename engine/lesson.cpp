@@ -24,10 +24,11 @@ Lesson reference_lesson() {
     l.in_window = [](double mass, double low, double high) { return low <= mass && mass <= high; };
     return l;
 }
-int check_lesson(const Lesson& l) {
+int check_lesson(const Lesson& l, std::ostream& out) {
     int failures = 0;
     auto check = [&](bool ok, const char* message) {
-        std::cout << (ok ? "[OK]   " : "[TODO] ") << message << '\n';
+        // Flush: si el codigo del alumno se cae, quedan visibles las ya pasadas.
+        out << (ok ? "[OK]   " : "[TODO] ") << message << '\n' << std::flush;
         if (!ok) ++failures;
     };
     switch (l.number) {

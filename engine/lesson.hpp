@@ -1,6 +1,7 @@
 #pragma once
 #include "domain.hpp"
 #include <functional>
+#include <iostream>
 
 namespace course {
 // Contrato pequeno entre el motor (entrada/dibujo) y el codigo del nivel.
@@ -19,5 +20,5 @@ struct Lesson {
 };
 Lesson reference_lesson();
 Lesson make_lesson(bool demo);
-int check_lesson(const Lesson& lesson);
+int check_lesson(const Lesson& lesson, std::ostream& out = std::cout);
 } // namespace course

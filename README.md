@@ -79,16 +79,40 @@ El primer `build` crea `build/compile_commands.json` para los seis niveles,
 aunque solo compila el nivel solicitado. Si cambias de compilador (`CXX`),
 compila de nuevo para actualizar las opciones de clangd.
 
+## Modo watch: el ciclo de trabajo
+
+Como `rustlings watch`: deja una terminal abierta junto al editor.
+
+```bash
+python3 course.py watch --student mi_alias
+```
+
+Abre el primer nivel pendiente y muestra el archivo, la tarea y las pruebas ✓/✗.
+Cada vez que **guardas**, recompila y vuelve a comprobar solo. Si no compila, muestra
+el primer error con archivo y línea; si el programa se cae (por ejemplo un puntero
+nulo), lo dice y sugiere el breakpoint.
+
+| Tecla | Acción |
+|---|---|
+| `h` | pista: la pregunta del nivel y qué inspeccionar en el depurador |
+| `p` | jugar este nivel con tu código; al salir vuelves a watch |
+| `n` | siguiente nivel, cuando todas las pruebas pasan |
+| `1`-`6` | ir a un nivel |
+| `q` | salir |
+
+Al completar un nivel, watch pide responder en voz alta la pregunta del README antes
+de avanzar: el ✓ no cierra el nivel, la explicación sí.
+
 ## Primer cambio: mover al jugador
 
 ```bash
-bash course.sh play 1 --student mi_alias
+python3 course.py watch 1 --student mi_alias
 ```
 
 1. El taller empieza con el movimiento pendiente. Abre `levels/01/lesson.cpp`.
 2. Predice qué debe cambiar al pulsar D. Implementa la operación usando `World::walkable`.
-3. Compila de nuevo y juega. El teclado y el mapa ya funcionan.
-4. Ejecuta `bash course.sh check 1 --student mi_alias`. El resultado explica los casos pendientes.
+3. Guarda. Watch recompila y muestra qué pruebas pasan y cuál sigue.
+4. Pulsa `p` para jugar con tu código: el teclado y el mapa ya funcionan.
 
 La **demo** usa la referencia funcional y no otorga logros. El **taller** usa el código
 del nivel. Es normal que las comprobaciones del taller fallen antes de implementar
@@ -107,7 +131,34 @@ bash course.sh check 2 --student mi_alias
 
 Los binarios están en `build/level01/game` … `build/level06/game` (`.exe` en Windows).
 Son ejecutables normales: puedes lanzarlos desde Bash, PowerShell o GDB.
-`--step` usa una acción + Enter; `--plain` evita secuencias de pantalla.
+En una terminal interactiva compatible, el juego usa una pantalla alternativa:
+actualiza el mismo espacio y restaura la consola al salir, incluso con SIGINT o
+SIGTERM. No borra el historial del usuario. El diseño recomendado es 80 × 24;
+desde 60 × 21 usa un mapa compacto. Con menos espacio muestra un aviso; el tamaño
+se vuelve a consultar en la siguiente interacción.
+
+Para probar el arte y el encuentro con el muón:
+
+```bash
+python3 course.py play 3 --demo
+```
+
+Pulsa **E**: el mapa da paso a una escena de encuentro con una criatura de
+20 × 20 píxeles, dibujada con medios bloques Unicode y una paleta ANSI de 16
+colores. **1** reduce la vitalidad; tras dos interacciones, **2** permite
+capturarla. **3** vuelve al mapa. El último integrante del equipo aparece como
+compañero en la exploración. Las matrices originales están en
+`engine/sprites.hpp`: seis siluetas y variantes para las 17 especies.
+Son mascotas ficticias, no representaciones de la geometría de partículas.
+El arte necesita una terminal UTF-8 con glifos `▀`, `▄` y `█`; sin UTF-8 se
+usan etiquetas de texto y un mapa ASCII, conservando todas las acciones.
+
+`--step` usa una acción + Enter y salida textual; `--plain` evita secuencias de
+pantalla. La salida redirigida y las terminales sin ANSI también usan texto.
+`--plain --step` permite guardar una transcripción legible. Los glifos del mapa
+usan Unicode en entornos UTF-8 y ASCII en los demás. El panel conserva la misión,
+el archivo que debes editar y los resultados de `[V]`; para consultar todos los
+casos de evaluación usa `course.py check` o el modo textual.
 
 En VS Code, instala las extensiones recomendadas como se indica arriba, abre la
 raíz del curso, pon un breakpoint en el archivo del nivel y pulsa

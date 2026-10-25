@@ -5,16 +5,140 @@ import json
 import math
 import os
 from pathlib import Path
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import unicodedata
 import unittest
 import zipfile
+
+if os.name != "nt":
+    import fcntl
+    import pty
+    import select
+    import signal
+    import struct
+    import termios
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("course_cli", ROOT / "course.py")
 cli = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cli)
+
+
+class TerminalScreen:
+    """Small VT screen model: detect scrolling and writes outside the viewport."""
+    def __init__(self, columns, rows):
+        self.columns, self.rows = columns, rows
+        self.x = self.y = self.scrolls = self.overflow = 0
+        self.active = False
+        self.cells = [[" "] * columns for _ in range(rows)]
+
+    def read(self, output):
+        for token in re.findall(r"\x1b\[[0-?]*[ -/]*[@-~]|[^\x1b]", output.decode("utf-8")):
+            if token.startswith("\x1b["):
+                args, command = token[2:-1], token[-1]
+                if args == "?1049" and command in "hl":
+                    self.active = command == "h"
+                    self.x = self.y = 0
+                elif self.active:
+                    values = [int(v or "0") for v in args.split(";")] if not args.startswith("?") else []
+                    if command in "Hf":
+                        self.y = max(0, (values[0] if values else 1) - 1)
+                        self.x = max(0, (values[1] if len(values) > 1 else 1) - 1)
+                        self.overflow += self.y >= self.rows or self.x >= self.columns
+                    elif command == "J" and values and values[0] == 2:
+                        self.cells = [[" "] * self.columns for _ in range(self.rows)]
+                    elif command == "J" and (not values or values[0] == 0):
+                        if self.y < self.rows:
+                            self.cells[self.y][self.x:] = [" "] * max(0, self.columns - self.x)
+                            for row in range(self.y + 1, self.rows):
+                                self.cells[row] = [" "] * self.columns
+                    elif command == "K" and self.y < self.rows:
+                        start = 0 if values and values[0] == 2 else self.x
+                        self.cells[self.y][start:] = [" "] * max(0, self.columns - start)
+                continue
+            if not self.active:
+                continue
+            if token == "\r":
+                self.x = 0
+            elif token == "\n":
+                self.y += 1
+                if self.y >= self.rows:
+                    self.scrolls += 1
+                    self.y = self.rows - 1
+            elif token >= " " and token != "\x7f":
+                width = 0 if unicodedata.combining(token) else (2 if unicodedata.east_asian_width(token) in "WF" else 1)
+                if self.x + width > self.columns:
+                    self.x = 0
+                    self.y += 1
+                    if self.y >= self.rows:
+                        self.scrolls += 1
+                        self.y = self.rows - 1
+                if self.y < self.rows and self.x < self.columns:
+                    self.cells[self.y][self.x] = token
+                else:
+                    self.overflow += 1
+                self.x += width
+        return "\n".join("".join(row) for row in self.cells)
+
+
+class PtyGame:
+    def __init__(self, binary, folder, *args, columns=80, rows=24, term="xterm-256color"):
+        self.master, self.slave = pty.openpty()
+        self.resize(columns, rows)
+        self.before = termios.tcgetattr(self.slave)
+        self.output = b""
+        self.process = subprocess.Popen([str(binary), "--demo", *args], stdin=self.slave,
+                                        stdout=self.slave, stderr=self.slave, cwd=folder,
+                                        env=dict(os.environ, TERM=term, LANG="C.UTF-8", LC_ALL="C.UTF-8"))
+
+    def resize(self, columns, rows):
+        fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
+
+    def read(self, timeout=.05):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select([self.master], [], [], max(0, deadline - time.monotonic()))
+            if not ready:
+                break
+            try:
+                data = os.read(self.master, 65536)
+            except OSError:
+                break
+            if not data:
+                break
+            self.output += data
+        return self.output
+
+    def wait_for(self, marker, start=0):
+        deadline = time.monotonic() + 5
+        while marker not in self.output[start:] and time.monotonic() < deadline:
+            self.read(.05)
+        if marker not in self.output[start:]:
+            raise AssertionError("PTY did not emit %r: %r" % (marker, self.output[-1000:]))
+
+    def key(self, key):
+        os.write(self.master, key.encode())
+        self.read(.02)
+
+    def finish(self, sig=None):
+        if sig is None:
+            os.write(self.master, b"q")
+        else:
+            self.process.send_signal(sig)
+        self.process.wait(timeout=5)
+        self.read(.05)
+
+    def close(self):
+        if self.process.poll() is None:
+            self.process.kill()
+            self.process.wait()
+        os.close(self.master)
+        os.close(self.slave)
 
 
 class CourseTest(unittest.TestCase):
@@ -106,30 +230,220 @@ class CourseTest(unittest.TestCase):
             self.assertIn("Posicion: (3, 2)", result.stdout)
 
     @unittest.skipIf(os.name == "nt", "termios solo en POSIX")
-    def test_terminal_restores_flags_after_interrupt(self):
-        import pty
-        import select
-        import signal
-        import termios
-        import time
+    def test_terminal_restores_screen_and_flags_on_exit_and_signals(self):
         with tempfile.TemporaryDirectory() as folder:
-            master, slave = pty.openpty()
-            before = termios.tcgetattr(slave)
-            process = subprocess.Popen([str(self.binaries[1]), "--demo"], stdin=slave, stdout=slave, stderr=slave, cwd=folder)
+            for sig in (None, signal.SIGINT, signal.SIGTERM):
+                with self.subTest(signal=sig):
+                    game = PtyGame(self.binaries[1], folder)
+                    try:
+                        game.wait_for(b'[Q]')
+                        self.assertIn(b'\x1b[?1049h', game.output)
+                        self.assertIn(b'\x1b[?25l', game.output)
+                        during = termios.tcgetattr(game.slave)
+                        self.assertFalse(during[3] & (termios.ICANON | termios.ECHO))
+                        game.finish(sig)
+                        self.assertEqual(game.process.returncode, 0)
+                        self.assertEqual(termios.tcgetattr(game.slave), game.before)
+                        self.assertEqual(game.output.count(b'\x1b[?1049h'), 1)
+                        self.assertEqual(game.output.count(b'\x1b[?1049l'), 1)
+                        self.assertIn(b'\x1b[?25h', game.output)
+                        self.assertIn(b'\x1b[0m', game.output)
+                        self.assertNotIn(b'\x1b[3J', game.output)
+                    finally:
+                        game.close()
+
+    @unittest.skipIf(os.name == "nt", "pseudoterminal POSIX")
+    def test_terminal_restores_after_export_exception(self):
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / 'output').write_text('not a directory')
+            game = PtyGame(self.binaries[1], folder)
             try:
-                deadline = time.monotonic() + 10
-                output = b''
-                while b'[Q]' not in output and time.monotonic() < deadline:
-                    ready, _, _ = select.select([master], [], [], .2)
-                    if ready: output += os.read(master, 65536)
-                self.assertIn(b'[Q]', output)
-                during = termios.tcgetattr(slave)
-                self.assertFalse(during[3] & termios.ICANON)
-                process.send_signal(signal.SIGINT); process.wait(timeout=5)
-                self.assertEqual(termios.tcgetattr(slave), before)
+                game.wait_for(b'[Q]')
+                game.key('x')
+                game.process.wait(timeout=5)
+                game.read()
+                self.assertEqual(game.process.returncode, 2)
+                self.assertEqual(termios.tcgetattr(game.slave), game.before)
+                self.assertIn(b'\x1b[?1049l', game.output)
+                self.assertIn(b'\x1b[?25h', game.output)
+                self.assertLess(game.output.index(b'\x1b[?1049l'), game.output.index(b'[ERROR]'))
             finally:
-                if process.poll() is None: process.kill(); process.wait()
-                os.close(master); os.close(slave)
+                game.close()
+
+    @unittest.skipIf(os.name == "nt", "pseudoterminal POSIX")
+    def test_persistent_screen_100_moves_and_encounter(self):
+        with tempfile.TemporaryDirectory() as folder:
+            game = PtyGame(self.binaries[3], folder)
+            try:
+                game.wait_for(b'[Q]')
+                game.read(.08)
+                unchanged = game.output
+                game.key('?')
+                self.assertEqual(game.output, unchanged, 'Unchanged state should not repaint')
+                for index in range(100):
+                    # Close automatic encounters before the next actual movement.
+                    game.key('3' + ('a' if index % 2 == 0 else 'd'))
+                game.key('3e')
+                game.key('1')
+                screen = TerminalScreen(80, 24)
+                visible = screen.read(game.output)
+                self.assertIn('75', visible)
+                self.assertIn('SINTETICO', visible.upper())
+                self.assertIn('[Q]', visible)
+                self.assertGreaterEqual(game.output.count(b'ROOT QUEST'), 100)
+                self.assertEqual(screen.scrolls, 0)
+                self.assertEqual(screen.overflow, 0)
+                game.key('1')
+                game.key('2')
+                screen = TerminalScreen(80, 24)
+                self.assertIn('2/6', screen.read(game.output))
+                game.key('v')
+                screen = TerminalScreen(80, 24)
+                self.assertIn('✓', screen.read(game.output))
+                self.assertEqual(screen.scrolls, 0)
+                self.assertEqual(screen.overflow, 0)
+                game.key('x')
+                screen = TerminalScreen(80, 24)
+                self.assertIn('CSV:', screen.read(game.output))
+                self.assertEqual(screen.scrolls, 0)
+                self.assertEqual(screen.overflow, 0)
+                self.assertTrue((Path(folder) / 'output/encounters.csv').is_file())
+                game.finish()
+                self.assertEqual(game.process.returncode, 0)
+                self.assertEqual(termios.tcgetattr(game.slave), game.before)
+                screen = TerminalScreen(80, 24)
+                screen.read(game.output)
+                self.assertEqual(screen.scrolls, 0)
+                self.assertEqual(screen.overflow, 0)
+                self.assertEqual(game.output.count(b'\x1b[?1049h'), 1)
+            finally:
+                game.close()
+
+    @unittest.skipIf(os.name == "nt", "pseudoterminal POSIX")
+    def test_pixel_encounters_replace_map_and_capture_updates_companion(self):
+        with tempfile.TemporaryDirectory() as folder:
+            game = PtyGame(self.binaries[3], folder)
+            try:
+                game.wait_for(b'[Q]')
+                screen = TerminalScreen(80, 24)
+                self.assertIn('MISION', screen.read(game.output))
+                # All six art bases appear through normal gameplay, no demo-only
+                # mechanics. Check the emitted picture, not the source matrices.
+                pictures = set()
+                names = {1: 'Muon', 3: 'Neutrino electronico', 6: 'Up',
+                         12: 'Foton', 16: 'Higgs', 17: 'Electron'}
+                for encounter in range(1, 18):
+                    game.key('e')
+                    screen = TerminalScreen(80, 24)
+                    visible = screen.read(game.output)
+                    self.assertIn('ENCUENTRO', visible)
+                    self.assertNotIn('MISION', visible)
+                    self.assertIn('100/100', visible)
+                    self.assertIn('[1] Interactuar', visible)
+                    if encounter in names:
+                        self.assertIn(names[encounter], visible)
+                        picture = '\n'.join(row[56:] for row in visible.splitlines()[3:9])
+                        self.assertGreater(sum(picture.count(c) for c in '▀▄█'), 15)
+                        pictures.add(picture)
+                    if encounter == 6:
+                        self.assertIn('carga +2/3 e', visible)
+                    game.key('3')
+                self.assertEqual(len(pictures), 6)
+                # The next encounter is a muon again; capture leaves the scene
+                # and the new companion portrait immediately replaces Electron.
+                game.key('e112')
+                screen = TerminalScreen(80, 24)
+                visible = screen.read(game.output)
+                self.assertIn('MISION', visible)
+                self.assertNotIn('ENCUENTRO', visible)
+                self.assertIn('EQUIPO 2/6  e- mu-', visible)
+                self.assertIn('EQUIPO 2/6', visible)
+                self.assertEqual(screen.scrolls, 0)
+                self.assertEqual(screen.overflow, 0)
+                game.finish()
+            finally:
+                game.close()
+
+    @unittest.skipIf(os.name == "nt", "pseudoterminal POSIX")
+    def test_resize_keeps_compact_and_tiny_screens_in_bounds(self):
+        with tempfile.TemporaryDirectory() as folder:
+            game = PtyGame(self.binaries[1], folder)
+            try:
+                game.wait_for(b'[Q]')
+                for columns, rows in ((60, 21), (79, 23), (60, 18), (30, 8), (12, 3), (80, 24)):
+                    with self.subTest(columns=columns, rows=rows):
+                        game.resize(columns, rows)
+                        start = len(game.output)
+                        game.key('e')
+                        game.key('3')
+                        # Evaluate only output rendered at these dimensions.
+                        screen = TerminalScreen(columns, rows)
+                        visible = screen.read(b'\x1b[?1049h' + game.output[start:])
+                        self.assertTrue(visible.strip())
+                        self.assertEqual(screen.scrolls, 0)
+                        self.assertEqual(screen.overflow, 0)
+                game.finish()
+                self.assertEqual(termios.tcgetattr(game.slave), game.before)
+            finally:
+                game.close()
+
+    def test_redirected_and_plain_step_output_have_no_ansi(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for args in ((), ('--plain', '--step'), ('--step',)):
+                with self.subTest(args=args):
+                    result = self.run_game(1, '--demo', *args, input='e\n1\nq\n', cwd=folder)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertNotIn('\x1b', result.stdout)
+                    self.assertIn('ROOT QUEST', result.stdout)
+                    self.assertIn('SINTETICO', result.stdout)
+
+    @unittest.skipIf(os.name == "nt", "pseudoterminal POSIX")
+    def test_step_mode_unblocks_on_signals(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                with self.subTest(signal=sig):
+                    game = PtyGame(self.binaries[1], folder, '--plain', '--step')
+                    try:
+                        game.wait_for(b'accion> ')
+                        game.finish(sig)
+                        self.assertEqual(game.process.returncode, 0)
+                        self.assertNotIn(b'\x1b', game.output)
+                        self.assertEqual(termios.tcgetattr(game.slave), game.before)
+                    finally:
+                        game.close()
+
+    @unittest.skipIf(os.name == "nt", "pseudoterminal POSIX")
+    def test_plain_step_and_dumb_terminal_do_not_enter_alternate_screen(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for args, term in ((('--plain', '--step'), 'xterm-256color'), ((), 'dumb')):
+                with self.subTest(args=args, term=term):
+                    game = PtyGame(self.binaries[1], folder, *args, term=term)
+                    try:
+                        game.wait_for(b'[Q]')
+                        game.key('q\n')
+                        game.process.wait(timeout=5)
+                        game.read()
+                        self.assertNotIn(b'\x1b', game.output)
+                        self.assertEqual(termios.tcgetattr(game.slave), game.before)
+                    finally:
+                        game.close()
+
+    def test_watch_once_reports_next_check_and_completion(self):
+        # Sin terminal, watch compila y comprueba una vez, como un check guiado.
+        run = lambda *args: subprocess.run([sys.executable, str(ROOT / "course.py"), "watch", *args],
+                                           cwd=ROOT, stdin=subprocess.DEVNULL, text=True,
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+        try:
+            pending = run("1", "--student", "watch-probe")
+            self.assertEqual(pending.returncode, 1, pending.stderr)
+            self.assertIn("S01", pending.stdout)
+            self.assertIn("Siguiente: El camino libre modifica el objeto original", pending.stdout)
+            done = run("1", "--demo")
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertIn("Nivel completo", done.stdout)
+            self.assertNotIn("\x1b", done.stdout)
+        finally:
+            shutil.rmtree(ROOT / ".course/watch-probe", ignore_errors=True)
 
     def test_package_excludes_student_data(self):
         self.assertEqual(cli.pack(), 0)

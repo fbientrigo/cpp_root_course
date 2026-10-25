@@ -56,9 +56,13 @@ int main(int argc, char** argv) {
                 << " seleccionados=" << selected << " | seed=" << seed << '\n';
             return 0;
         }
-        course::Terminal terminal(step, plain, sound);
-        course::Game game(lesson, demo, progress, terminal);
-        game.run();
+        std::filesystem::path path;
+        {
+            course::Terminal terminal(step, plain, sound);
+            course::Game game(lesson, demo, progress, terminal);
+            path = game.run();
+        }
+        std::cout << "\nProgreso: " << path.string() << "\nImportalo en la pagina del curso.\n";
     } catch (const std::exception& e) {
         std::cerr << "[ERROR] " << e.what() << '\n'; return 2;
     }

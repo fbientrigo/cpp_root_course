@@ -3,10 +3,12 @@
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 import zipfile
 
 ROOT = Path(__file__).resolve().parent
@@ -21,7 +23,13 @@ def compiler():
     raise RuntimeError("Falta GCC/Clang en PATH. Ejecuta doctor y consulta README.md; CXX puede indicar el ejecutable.")
 
 
-def build(level):
+class CompileError(RuntimeError):
+    def __init__(self, message, output):
+        super().__init__(message)
+        self.output = output
+
+
+def build(level, quiet=False):
     cxx = compiler()
     folder = ROOT / "build" / ("level%02d" % level)
     folder.mkdir(parents=True, exist_ok=True)
@@ -34,11 +42,18 @@ def build(level):
     stale = (not binary.exists() or not signature_path.exists() or signature_path.read_text() != signature or
              any(p.stat().st_mtime > binary.stat().st_mtime for p in dependencies))
     if stale:
-        cmd = [cxx] + flags + [str(p) for p in sources] + ["-o", str(binary)]
-        print("[BUILD] S%02d / debug (-O0 -g)" % level, flush=True)
-        result = subprocess.run(cmd, cwd=ROOT)
+        # Compilar a un temporal y reemplazar de una vez: watch y F5 pueden
+        # compilar el mismo nivel a la vez sin dejar un binario a medias.
+        partial = binary.with_name("%s.%d.tmp" % (binary.name, os.getpid()))
+        cmd = [cxx] + flags + [str(p) for p in sources] + ["-o", str(partial)]
+        if not quiet:
+            print("[BUILD] S%02d / debug (-O0 -g)" % level, flush=True)
+        result = subprocess.run(cmd, cwd=ROOT, capture_output=quiet, text=True)
         if result.returncode:
-            raise RuntimeError("El compilador encontro un problema. El primer mensaje indica archivo y linea.")
+            partial.unlink(missing_ok=True)
+            raise CompileError("El compilador encontro un problema. El primer mensaje indica archivo y linea.",
+                               result.stderr if quiet else "")
+        os.replace(str(partial), str(binary))
         signature_path.write_text(signature)
     # Index all levels, not just the most recently built one. This keeps
     # clangd navigation and diagnostics valid when students change sessions.
@@ -91,10 +106,208 @@ def pack():
     return 0
 
 
+def level_info(level):
+    """Titulo, archivo, tarea y pistas: el README del nivel es la unica fuente."""
+    text = (ROOT / ("levels/%02d/README.md" % level)).read_text(encoding="utf-8")
+    def find(pattern, default=""):
+        match = re.search(pattern, text)
+        return match.group(1).strip() if match else default
+    return {
+        "title": text.splitlines()[0].lstrip("# ").strip(),
+        "question": find(r"\*\*Antes de programar:\*\*\s*(.+)"),
+        "source": find(r"Archivo: `([^`]+)`", "levels/%02d/lesson.cpp" % level),
+        "task": find(r"Archivo: `[^`]+`\.\s*(.+)"),
+        "inspect": find(r"Inspecciona `([^`]+)`"),
+    }
+
+
+class Keys:
+    """Una tecla sin Enter, con espera limitada; restaura la terminal al salir."""
+    def __enter__(self):
+        if os.name != "nt":
+            import termios
+            import tty
+            self.fd = sys.stdin.fileno()
+            self.saved = termios.tcgetattr(self.fd)
+            tty.setcbreak(self.fd)
+        return self
+
+    def __exit__(self, *error):
+        self.pause()
+
+    def pause(self):
+        if os.name != "nt":
+            import termios
+            termios.tcsetattr(self.fd, termios.TCSADRAIN, self.saved)
+
+    def resume(self):
+        if os.name != "nt":
+            import tty
+            tty.setcbreak(self.fd)
+
+    def read(self, timeout):
+        if os.name == "nt":
+            import msvcrt
+            end = time.monotonic() + timeout
+            while time.monotonic() < end:
+                if msvcrt.kbhit():
+                    return msvcrt.getwch()
+                time.sleep(0.05)
+            return None
+        import select
+        ready, _, _ = select.select([sys.stdin], [], [], timeout)
+        return os.read(self.fd, 1).decode(errors="ignore") if ready else None
+
+
+def attempt(level, student, demo):
+    """Compila y comprueba un nivel. Devuelve (estado, lineas) para mostrar."""
+    try:
+        binary = build(level, quiet=True)
+    except CompileError as error:
+        # Rutas relativas: el alumno busca levels/0N/..., no la ruta absoluta.
+        lines = [l.replace(str(ROOT) + os.sep, "") for l in error.output.splitlines() if l.strip()]
+        first = next((l for l in lines if "error" in l), lines[0] if lines else "")
+        return "compile", [first] + [l for l in lines if l != first][:14]
+    command = [str(binary), "--check", "--student", student] + (["--demo"] if demo else [])
+    try:
+        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=10)
+    except subprocess.TimeoutExpired:
+        return "crash", ["Las pruebas no terminaron en 10 s: revisa si hay un bucle infinito."]
+    checks = [l for l in result.stdout.splitlines() if l.startswith(("[OK]", "[TODO]"))]
+    if result.returncode < 0 or result.returncode > 2 or (result.returncode and not checks):
+        # Negativo en POSIX (senal); 0xC0000005 en Windows (acceso invalido).
+        return "crash", ["El programa se cerro antes de terminar las pruebas (codigo %d)." % result.returncode,
+                         "Suele ser un puntero nulo o un indice fuera de rango.",
+                         "Pon un breakpoint en tu funcion y ejecuta con F5."] + (
+                            ["Pruebas completadas antes del fallo:"] + ["  " + c for c in checks] if checks else [])
+    return ("passed" if result.returncode == 0 else "pending"), checks
+
+
+def watch(first_level, student, demo, plain):
+    interactive = sys.stdin.isatty() and sys.stdout.isatty()
+    color = interactive and not plain and os.environ.get("TERM") != "dumb"
+    utf8 = (sys.stdout.encoding or "").lower().replace("-", "") == "utf8"
+    if os.name == "nt" and color:
+        os.system("")  # Activa las secuencias VT en la consola de Windows.
+    ok, todo = ("✓", "✗") if utf8 else ("OK", "--")
+
+    def paint(code, text):
+        return "\033[%sm%s\033[0m" % (code, text) if color else text
+
+    profile = ROOT / ".course" / ("demo" if demo else student) / "earned.txt"
+    passed = set()
+
+    def done(level):
+        if level in passed:
+            return True
+        return profile.exists() and ("check0%d" % level) in profile.read_text().split()
+
+    level = first_level or next((i for i in range(1, 7) if not done(i)), 6)
+    show_hint = False
+
+    def screen(state, lines):
+        info = level_info(level)
+        out = []
+        bar = "".join(paint("92", ok if utf8 else "#") if done(i) else
+                      paint("96", "○" if utf8 else "o") if i == level else
+                      paint("90", "·" if utf8 else ".") for i in range(1, 7))
+        finished = sum(done(i) for i in range(1, 7))
+        out.append(paint("1", "ROOT QUEST") + "  " + bar + "  %d/6" % finished
+                   + paint("90", "   alias: " + ("demo" if demo else student)))
+        out.append("")
+        out.append(paint("1", info["title"]))
+        out.append(paint("90", "Archivo  ") + paint("96", info["source"]))
+        out.append(paint("90", "Tarea    ") + info["task"])
+        out.append("")
+        if state == "compile":
+            out.append(paint("91", todo + " No compila.") + " Lee solo el primer error: indica archivo y linea.")
+            out.append("")
+            out += ["  " + paint("91" if i == 0 else "90", l) for i, l in enumerate(lines)]
+        elif state == "crash":
+            out.append(paint("91", todo + " Se cayo al probar."))
+            out += ["  " + l for l in lines]
+        else:
+            good = sum(l.startswith("[OK]") for l in lines)
+            out.append(paint("92" if state == "passed" else "93", "PRUEBAS %d/%d" % (good, len(lines))))
+            for l in lines:
+                mark = paint("92", ok) if l.startswith("[OK]") else paint("93", todo)
+                out.append("  %s %s" % (mark, l.split("]", 1)[1].strip()))
+            out.append("")
+            if state == "passed":
+                out.append(paint("92", "Nivel completo.") + " Antes de seguir, responde en voz alta:")
+                out.append("  " + info["question"])
+            else:
+                pending = next(l for l in lines if l.startswith("[TODO]")).split("]", 1)[1].strip()
+                out.append(paint("1", "Siguiente: ") + pending)
+                out.append(paint("90", "Guarda el archivo y se vuelve a comprobar solo." if interactive
+                                 else "Corrige y ejecuta: python3 course.py watch"))
+        if show_hint and state != "passed":
+            out.append("")
+            out.append(paint("96", "PISTA"))
+            out.append("  Antes de escribir: " + info["question"])
+            if info["inspect"]:
+                out.append("  Breakpoint en %s; inspecciona %s." % (info["source"], info["inspect"]))
+            out.append("  Compara con la referencia jugando: python3 course.py demo %d" % level)
+        if not interactive:
+            print("\n".join(out), flush=True)
+            return
+        out.append("")
+        keys = ["[h] pista", "[p] jugar", "[1-6] nivel", "[q] salir"]
+        if state == "passed" and level < 6:
+            keys.insert(0, "[n] siguiente")
+        out.append(paint("96", "  ".join(keys)))
+        if color:
+            sys.stdout.write("\033[H\033[2J")
+        print("\n".join(out), flush=True)
+
+    def sources():
+        folder = ROOT / ("levels/%02d" % level)
+        return {p: p.stat().st_mtime for p in sorted(folder.glob("*.[ch]pp"))}
+
+    state, lines = attempt(level, student, demo)
+    if state == "passed":
+        passed.add(level)
+    if not interactive:
+        screen(state, lines)
+        return 0 if state == "passed" else 1
+    with Keys() as keys:
+        seen = sources()
+        screen(state, lines)
+        while True:
+            key = keys.read(0.4)
+            current = sources()
+            rerun = current != seen
+            if key in ("q", "Q", "\x03"):
+                break
+            if key in ("h", "H"):
+                show_hint = not show_hint
+                screen(state, lines)
+            elif key in ("n", "N") and state == "passed" and level < 6:
+                level, show_hint, rerun = level + 1, False, True
+            elif key and key in "123456":
+                level, show_hint, rerun = int(key), False, True
+            elif key in ("r", "R"):
+                rerun = True
+            elif key in ("p", "P") and state != "compile":
+                keys.pause()
+                command = [str(build(level, quiet=True)), "--student", student] + (["--demo"] if demo else [])
+                subprocess.call(command, cwd=ROOT)
+                keys.resume()
+                rerun = True
+            if rerun:
+                seen = sources()
+                print(paint("90", "compilando y probando S%02d..." % level), flush=True)
+                state, lines = attempt(level, student, demo)
+                if state == "passed":
+                    passed.add(level)
+                screen(state, lines)
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="ROOT Quest: compilar, jugar, verificar, analizar.")
-    parser.add_argument("command", choices=["doctor", "setup-vscode", "build", "play", "demo", "check", "batch", "progress", "pack", "root"])
-    parser.add_argument("level", nargs="?", choices=[str(i) for i in range(1, 7)] + ["all"], default="1")
+    parser.add_argument("command", choices=["watch", "doctor", "setup-vscode", "build", "play", "demo", "check", "batch", "progress", "pack", "root"])
+    parser.add_argument("level", nargs="?", choices=[str(i) for i in range(1, 7)] + ["all"])
     parser.add_argument("--student", default="alumno", help="alias local ASCII, 1-32 caracteres")
     parser.add_argument("--demo", action="store_true", help="referencia funcional; no acredita progreso")
     parser.add_argument("--step", action="store_true", help="una accion + Enter; util en el depurador")
@@ -116,6 +329,11 @@ def main():
         parser.error("events debe estar en 1..1000000 y seed en 0..4294967295")
     if not args.student or len(args.student) > 32 or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in args.student):
         parser.error("student: usa 1-32 letras ASCII, numeros, - o _")
+    if args.command == "watch":
+        if args.level == "all":
+            parser.error("watch recorre los niveles en orden; indica 1-6 o ninguno")
+        return watch(int(args.level) if args.level else None, args.student, args.demo, args.plain)
+    args.level = args.level or "1"
     if args.command == "progress":
         path = ROOT / ".course" / args.student / "progress.json"
         if not path.exists():
