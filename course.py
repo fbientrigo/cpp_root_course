@@ -40,21 +40,40 @@ def build(level):
         if result.returncode:
             raise RuntimeError("El compilador encontro un problema. El primer mensaje indica archivo y linea.")
         signature_path.write_text(signature)
-    commands = [{"directory": str(ROOT), "file": str(p), "arguments": [cxx] + flags + ["-c", str(p)]} for p in sources]
+    # Index all levels, not just the most recently built one. This keeps
+    # clangd navigation and diagnostics valid when students change sessions.
+    indexed_sources = [ROOT / "engine/main.cpp", ROOT / "engine/lesson.cpp"] + [
+        ROOT / ("levels/%02d/lesson.cpp" % i) for i in range(1, 7)
+    ]
+    commands = [{"directory": str(ROOT), "file": str(p), "arguments": [cxx] + flags + ["-c", str(p)]} for p in indexed_sources]
     (ROOT / "build/compile_commands.json").write_text(json.dumps(commands, indent=2))
     return binary
 
 
+def setup_vscode():
+    """Install the workspace's recommended VS Code extensions with the CLI."""
+    code = shutil.which("code") or shutil.which("code-insiders")
+    if not code:
+        raise RuntimeError("No se encontro 'code' en PATH. En VS Code abre la paleta (Ctrl+Shift+P), ejecuta 'Shell Command: Install code command in PATH' (si esta disponible), o instala las recomendaciones en Extensiones.")
+    extensions = json.loads((ROOT / ".vscode/extensions.json").read_text())["recommendations"]
+    for extension in extensions:
+        print("[VSCODE] " + extension, flush=True)
+        if subprocess.call([code, "--install-extension", extension]) != 0:
+            raise RuntimeError("No se pudo instalar " + extension + ". Revisa la conexion y prueba desde Extensiones en VS Code.")
+    print("[OK] Extensiones solicitadas. clangd requiere su servidor de lenguaje y build/compile_commands.json; ejecuta 'python course.py build 1'.")
+    return 0
+
+
 def doctor():
     print("Python:", sys.version.split()[0])
-    for name in ["g++", "clang++", "gdb", "root", "root-config", "git"]:
+    for name in ["g++", "clang++", "clangd", "gdb", "root", "root-config", "git"]:
         print("%-12s %s" % (name + ":", shutil.which(name) or "no encontrado"))
     try:
         print("Compilador elegido:", compiler())
     except RuntimeError as error:
         print(error)
         return 1
-    print("Juego: no necesita ROOT. F5: necesita GDB y Microsoft C/C++. Sonido POSIX: campana del terminal.")
+    print("Juego: no necesita ROOT. VS Code: clangd para editar; GDB y C/C++ para F5. Sonido POSIX: campana del terminal.")
     return 0
 
 
@@ -74,7 +93,7 @@ def pack():
 
 def main():
     parser = argparse.ArgumentParser(description="ROOT Quest: compilar, jugar, verificar, analizar.")
-    parser.add_argument("command", choices=["doctor", "build", "play", "demo", "check", "batch", "progress", "pack", "root"])
+    parser.add_argument("command", choices=["doctor", "setup-vscode", "build", "play", "demo", "check", "batch", "progress", "pack", "root"])
     parser.add_argument("level", nargs="?", choices=[str(i) for i in range(1, 7)] + ["all"], default="1")
     parser.add_argument("--student", default="alumno", help="alias local ASCII, 1-32 caracteres")
     parser.add_argument("--demo", action="store_true", help="referencia funcional; no acredita progreso")
@@ -87,6 +106,8 @@ def main():
     args = parser.parse_args()
     if args.command == "doctor":
         return doctor()
+    if args.command == "setup-vscode":
+        return setup_vscode()
     if args.command == "pack":
         return pack()
     if args.level == "all" and args.command not in ("build", "check"):
