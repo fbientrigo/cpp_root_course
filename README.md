@@ -51,6 +51,34 @@ scripts, usa directamente `python course.py`; no necesitas cambiar la política.
 El compilador MSVC no está configurado en esta primera versión. Git Bash por sí
 solo no instala un compilador. ROOT en Windows se trabaja preferentemente en WSL.
 
+### VS Code: entorno recomendado por proyecto
+
+El repositorio incluye `.vscode/extensions.json`, `.vscode/settings.json` y
+`.clangd`. Abre **la raíz** del curso con `code .` y acepta
+**Install Workspace Recommended Extensions** en VS Code, o instala las mismas
+extensiones desde la terminal en un comando (requiere el comando `code` en PATH):
+
+```bash
+bash course.sh setup-vscode
+bash course.sh build 1
+```
+
+En Windows PowerShell: `python course.py setup-vscode` y
+`python course.py build 1`. El instalador se puede repetir sin duplicar
+extensiones. No instala compiladores, Python, ROOT ni servidores de lenguaje.
+Para el autocompletado de clangd en Ubuntu/WSL instala `sudo apt install clangd`;
+la extensión también puede ofrecer instalar su propio servidor en otras
+plataformas. Ejecuta `bash course.sh doctor` para revisar herramientas.
+
+**clangd** proporciona autocompletado y diagnósticos; **Error Lens** los muestra
+en línea. **Microsoft C/C++** permanece instalado para depurar con GDB, pero
+su IntelliSense se desactiva en este workspace para evitar errores duplicados.
+**Live Share** sigue disponible para trabajar en pareja. El curso conserva
+su compilador GCC/Clang y `course.py`: **no necesita CMake ni LLDB**.
+El primer `build` crea `build/compile_commands.json` para los seis niveles,
+aunque solo compila el nivel solicitado. Si cambias de compilador (`CXX`),
+compila de nuevo para actualizar las opciones de clangd.
+
 ## Primer cambio: mover al jugador
 
 ```bash
@@ -81,13 +109,14 @@ Los binarios están en `build/level01/game` … `build/level06/game` (`.exe` en 
 Son ejecutables normales: puedes lanzarlos desde Bash, PowerShell o GDB.
 `--step` usa una acción + Enter; `--plain` evita secuencias de pantalla.
 
-En VS Code instala **Microsoft C/C++**, abre la raíz del curso, pon un breakpoint
-en el archivo del nivel y pulsa **F5 → Curso: depurar nivel**. La tarea pide el nivel
-una sola vez y prepara ese ejecutable en `build/debug/`. `-O0 -g` conserva variables y pasos.
-Usa F10, F11 y Variables/Watch para mirar `player`, `input`, `hp_` o `team`.
-Se genera `build/compile_commands.json` para autocompletado. Compila el nivel activo
-antes de inspeccionar sus cabeceras. GDB debe estar en PATH; la instalación de VS Code
-no lo incluye. La consola de depuración no recibe las teclas del juego: usa Terminal.
+En VS Code, instala las extensiones recomendadas como se indica arriba, abre la
+raíz del curso, pon un breakpoint en el archivo del nivel y pulsa
+**F5 → Curso: depurar nivel**. La tarea pide el nivel una sola vez y prepara ese
+ejecutable en `build/debug/`. `-O0 -g` conserva variables y pasos. Usa F10, F11
+y Variables/Watch para mirar `player`, `input`, `hp_` o `team`.
+`build/compile_commands.json` cubre los seis niveles y lo genera el primer `build`.
+GDB debe estar en PATH; la instalación de VS Code no lo incluye. La consola de
+depuración no recibe las teclas del juego: usa Terminal.
 
 Ejemplo sin wrappers:
 
