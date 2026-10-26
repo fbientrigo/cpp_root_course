@@ -109,9 +109,10 @@ class Game {
     Specimen wild_{1, 100};
     bool encounter_ = false, latest_selected_ = false, latest_window_ = false;
     int encounters_ = 0, moves_ = 0, events_ = 0, selected_ = 0;
+    art::SignalMotion signal_motion_;
     Generator generator_{42};
     Event latest_{};
-    std::string message_ = "Muevete con WASD. Cada 5 pasos, o con E, aparece una criatura.";
+    std::string message_ = "WASD explora los sectores. [E] abre un encuentro.";
     std::vector<Event> observations_;
     // Vacio hasta el primer [V]: el codigo del alumno puede fallar y no debe
     // ejecutarse sin que lo pida.
@@ -137,9 +138,10 @@ class Game {
     }
     void meet() {
         wild_ = {static_cast<std::size_t>((++encounters_) % static_cast<int>(catalogue().size())), 100};
+        signal_motion_ = art::SignalMotion{};
         encounter_ = true; latest_ = generator_.next(++events_);
         observations_.push_back(latest_);
-        message_ = std::string("Aparecio un ") + catalogue()[wild_.species].name + " salvaje. Elige una accion.";
+        message_ = "Encuentro #" + std::to_string(encounters_) + ": " + catalogue()[wild_.species].name + ".";
         latest_selected_ = lesson_.select(latest_, 0.6);
         if (lesson_.number == 6) latest_window_ = lesson_.in_window(latest_.mass(), 3.0, 3.2);
         if (latest_selected_) { ++selected_; award("first_selection"); }
@@ -160,13 +162,32 @@ class Game {
     }
 
     // Interfaz: pocos colores, cada uno con un significado fijo.
-    static constexpr const char* dim = "90";
-    static constexpr const char* accent = "96";
-    static constexpr const char* good = "92";
-    static constexpr const char* pending = "93";
-    static constexpr const char* strong = "1;97";
-    static std::string paint(const char* code, const std::string& text) {
-        return "\033[" + std::string(code) + "m" + text + "\033[0;37;40m";
+    static constexpr const char* dim = "dim";
+    static constexpr const char* accent = "cyan";
+    static constexpr const char* good = "good";
+    static constexpr const char* pending = "amber";
+    static constexpr const char* strong = "ink-bold";
+    std::string paint(const char* code, const std::string& text) const {
+        const std::string raw(code);
+        const bool bold = raw == "ink-bold";
+        const std::string name = bold ? "ink" : raw == "92" ? "good" : raw == "96" ? "cyan" :
+            raw == "93" || raw == "91" || raw == "33" ? "amber" : raw == "90" ? "dim" :
+            raw == "1;97" || raw == "1" ? "ink" : raw == "35" ? "region" : raw;
+        const int depth = terminal_.color_depth();
+        if (depth == 24) {
+            const char* rgb = name == "cyan" ? "38;2;2;132;199" :
+                name == "good" ? "38;2;16;185;129" : name == "amber" ? "38;2;217;119;6" :
+                name == "region" ? "38;2;125;211;252" : name == "dim" ? "38;2;113;113;122" : "38;2;24;24;27";
+            return "\033[" + std::string(rgb) + "m" + (bold ? "\033[1m" : "") + text + terminal_.paper();
+        }
+        if (depth == 256) {
+            const char* index = name == "cyan" ? "32" : name == "good" ? "41" :
+                name == "amber" ? "172" : name == "region" ? "117" : name == "dim" ? "245" : "232";
+            return "\033[38;5;" + std::string(index) + "m" + (bold ? "\033[1m" : "") + text + terminal_.paper();
+        }
+        const char* ansi = name == "cyan" ? "36" : name == "good" ? "32" :
+            name == "amber" ? "33" : name == "region" ? "36" : name == "dim" ? "90" : "1;30";
+        return "\033[" + std::string(ansi) + "m" + (bold ? "\033[1m" : "") + text + terminal_.paper();
     }
     static int cells(const std::string& text) {
         int n = 0;
@@ -196,16 +217,15 @@ class Game {
         std::ostringstream out; out << std::fixed << std::setprecision(3) << n; return out.str();
     }
     std::string header(int columns, const std::string& right) const {
-        const bool u = terminal_.unicode();
         std::string sessions;
         for (int i = 1; i <= 6; ++i) {
-            if (progress_.has("check0" + std::to_string(i))) sessions += paint(good, u ? "●" : "#");
-            else if (i == lesson_.number) sessions += paint(accent, u ? "○" : "o");
-            else sessions += paint(dim, u ? "·" : ".");
+            const std::string number = (i < 10 ? "0" : "") + std::to_string(i);
+            if (progress_.has("check0" + std::to_string(i))) sessions += paint(good, number) + " ";
+            else if (i == lesson_.number) sessions += paint(accent, "[" + number + "]") + " ";
+            else sessions += paint(dim, number) + " ";
         }
-        const std::string left = paint(strong, "ROOT QUEST") + "  " + paint(accent, "S0" + std::to_string(lesson_.number))
-            + "  " + lesson_.title;
-        const std::string tail = sessions + "  " + paint(dim, right);
+        const std::string left = paint(strong, "WIRED / OBSERVATORY");
+        const std::string tail = paint(dim, right) + "  " + sessions;
         return pad(left, columns - 1 - cells(tail)) + tail;
     }
     std::string rule(int columns) const {
@@ -216,32 +236,55 @@ class Game {
     std::string mark_if(int lesson) const {
         return lesson_.number == lesson ? "  " + paint(accent, terminal_.unicode() ? "◂ tu codigo" : "<- tu codigo") : "";
     }
-    std::vector<std::string> sprite_or_symbol(std::size_t species) const {
-        if (terminal_.unicode()) return art::sprite(species);
-        std::vector<std::string> rows(6, std::string(16, ' '));
-        rows[2] = pad("     [" + std::string(catalogue()[species].symbol) + "]", 16);
-        return rows;
+    std::string wall_cell(int x, int y) const {
+        const auto& rows = world_.rows;
+        const char tile = rows[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)];
+        if (player_.x == x && player_.y == y)
+            return paint(accent, terminal_.unicode() ? "◆ " : "@ ");
+        if (tile == ':') return paint(dim, terminal_.unicode() ? "· " : ": ");
+        if (tile != '#') return "  ";
+
+        const auto wall = [&](int nx, int ny) {
+            return ny >= 0 && ny < static_cast<int>(rows.size()) && nx >= 0 &&
+                nx < static_cast<int>(rows[static_cast<std::size_t>(ny)].size()) &&
+                rows[static_cast<std::size_t>(ny)][static_cast<std::size_t>(nx)] == '#';
+        };
+        const int mask = (wall(x, y - 1) ? 1 : 0) | (wall(x + 1, y) ? 2 : 0) |
+            (wall(x, y + 1) ? 4 : 0) | (wall(x - 1, y) ? 8 : 0);
+        if (!terminal_.unicode()) {
+            const bool vertical = (mask & 5) != 0, horizontal = (mask & 10) != 0;
+            const char edge = vertical && horizontal ? '+' : vertical ? '|' : horizontal ? '-' : ' ';
+            return std::string(1, edge) + (mask & 2 ? '-' : ' ');
+        }
+        static const char* junctions[] = {" ", "│", "─", "└", "│", "│", "┌", "├",
+            "─", "┘", "─", "┴", "┐", "┤", "┬", "┼"};
+        return std::string(junctions[mask]) + ((mask & 2) ? "─" : " ");
     }
-    void render_checks(std::vector<std::string>& lines, bool compact) const {
+    void render_checks(std::vector<std::string>& lines, bool compact, bool label = true, bool hint = true) const {
         const bool u = terminal_.unicode();
         if (!checked_) {
-            lines.push_back(paint(dim, "PRUEBAS  ") + "pulsa [V] para comprobar tu codigo");
+            lines.push_back((label ? paint(dim, "CODE_INSPECTOR  ") : "") + "[V] comprobar el ejercicio");
             return;
         }
         const auto passed = std::count_if(checks_.begin(), checks_.end(), [](const Check& c) { return c.ok; });
         const bool all = passed == static_cast<long>(checks_.size());
-        lines.push_back(paint(dim, "PRUEBAS  ") + paint(all ? good : pending,
+        lines.push_back((label ? paint(dim, "CODE_INSPECTOR  ") : "") + paint(all ? good : pending,
             std::to_string(passed) + "/" + std::to_string(checks_.size()))
             + (all ? paint(dim, "  listo: explica por que funciona") : paint(dim, "  edita, recompila y vuelve a [V]")));
-        for (const auto& c : checks_) {
-            if (compact && c.ok) continue;
-            lines.push_back("  " + (c.ok ? paint(good, u ? "✓" : "OK") : paint(pending, u ? "✗" : "--")) + " " + c.text);
-            if (compact) break; // En pantallas pequenas, solo la siguiente tarea.
-        }
+        if (all) lines.back() += "  " + paint(good, u ? "✓" : "OK");
+        if (!all && hint) {
+            const auto next = std::find_if(checks_.begin(), checks_.end(), [](const Check& c) { return !c.ok; });
+            if (next != checks_.end()) {
+                const auto size = terminal_.dimensions();
+                wrap(lines, std::string("  ") + (u ? "›" : ">") + " " + next->text,
+                    std::min(72, size.columns - 2), compact ? 1 : 2);
+            }
+        } else if (!compact) lines.push_back(paint(dim, "  Nivel completo; revisa el resultado y explica el codigo."));
     }
     void present(std::vector<std::string> body, const std::string& footer, int rows) const {
-        // El pie con las teclas siempre queda visible.
-        body.resize(std::min(body.size(), static_cast<std::size_t>(std::max(0, rows - 1))));
+        const auto count = static_cast<std::size_t>(std::max(0, rows - 1));
+        body.resize(std::min(body.size(), count));
+        body.resize(count);
         body.push_back(footer);
         terminal_.present(body);
     }
@@ -251,42 +294,43 @@ class Game {
         const auto focus = lesson_focus(lesson_.number);
         std::vector<std::string> lines;
         lines.push_back(header(columns, demo_ ? "DEMO" : "TALLER"));
+        lines.push_back(paint(strong, "S" + std::string(lesson_.number < 10 ? "0" : "") + std::to_string(lesson_.number) + "  " + lesson_.title));
         if (!compact) lines.push_back(rule(columns));
-        if (compact) {
-            wrap(lines, std::string("MISION  ") + lesson_.task, columns - 2, 2);
-            lines.push_back(paint(dim, "CODIGO  ") + lesson_.source);
-            lines.push_back("        " + paint(accent, focus.call) + " " + paint(dim, focus.where));
-        } else {
-            lines.push_back(paint(dim, "MISION  ") + lesson_.task);
-            lines.push_back(paint(dim, "CODIGO  ") + lesson_.source + "  " + paint(accent, focus.call) + " " + paint(dim, focus.where));
-            lines.push_back("");
-        }
+        lines.push_back(paint(dim, "TOPOLOGY_OBSERVATORY  /  " ) + "sectores de observacion");
+        wrap(lines, std::string("Mision  ") + lesson_.task, columns - 2, 2);
+        lines.push_back(paint(dim, "Codigo  ") + lesson_.source + "  " + paint(accent, focus.call));
 
-        const auto& companion = team_.back();
-        const auto& species = catalogue()[companion.species];
-        auto side = sprite_or_symbol(companion.species);
-        side.push_back(paint(strong, species.name) + paint(dim, "  " + std::string(family_name(species.family))));
-        std::string team = "EQUIPO " + std::to_string(team_.size()) + "/6 ";
-        for (const auto& p : team_) team += " " + std::string(catalogue()[p.species].symbol);
-        side.push_back(team);
-        side.push_back(paint(dim, "detector " + std::to_string(events_) + " evt, " + std::to_string(selected_) + " sel"));
-
-        const int map_width = static_cast<int>(world_.rows[0].size()) * (compact ? 1 : 2) + (compact ? 3 : 4);
+        const bool narrow = columns < 80;
+        const int map_width = static_cast<int>(world_.rows[0].size()) * (narrow ? 1 : 2);
+        const int side_width = std::max(0, columns - map_width - 5);
+        std::vector<std::string> side;
+        side.push_back(paint(dim, "PARTICLE_REGISTRY") + " " + std::to_string(team_.size()) + "/6");
+        std::string roster;
+        for (const auto& p : team_) roster += (roster.empty() ? "" : " ") + std::string(catalogue()[p.species].symbol);
+        std::vector<std::string> roster_lines;
+        wrap(roster_lines, roster, side_width, 2);
+        for (const auto& row : roster_lines) side.push_back(paint(good, row));
+        const auto& companion = catalogue()[team_.back().species];
+        side.push_back(rule(side_width));
+        side.push_back(paint(dim, "Ultimo: ") + companion.name);
+        side.push_back(paint(dim, std::string(family_name(companion.family)) + " q=" + charge_text(companion.charge3)
+            + " HP juego=" + std::to_string(team_.back().hp)));
+        side.push_back("Posicion " + std::to_string(player_.x) + ", " + std::to_string(player_.y));
+        side.push_back(paint(dim, "EVENT_INSPECTOR"));
+        side.push_back("evt:" + std::to_string(events_) + " sel:" + std::to_string(selected_));
         for (std::size_t y = 0; y < world_.rows.size(); ++y) {
             std::string row;
             for (std::size_t x = 0; x < world_.rows[y].size(); ++x) {
-                const char tile = world_.rows[y][x];
-                if (player_.x == static_cast<int>(x) && player_.y == static_cast<int>(y))
-                    row += paint(pending, u ? (compact ? "◆" : "▐▌") : (compact ? "@" : "@ "));
-                else if (tile == '#') row += paint(dim, u ? (compact ? "█" : "██") : (compact ? "#" : "##"));
-                else if (tile == ':') row += paint("35", u ? (compact ? "░" : "░░") : (compact ? ":" : ": "));
-                else row += compact ? " " : "  ";
+                if (narrow) {
+                    const char tile = world_.rows[y][x];
+                    row += player_.x == static_cast<int>(x) && player_.y == static_cast<int>(y) ? (u ? "◆" : "@") :
+                        tile == '#' ? (u ? "·" : ".") : tile == ':' ? ":" : " ";
+                } else row += wall_cell(static_cast<int>(x), static_cast<int>(y));
             }
-            lines.push_back(pad(row, map_width) + (y < side.size() ? side[y] : ""));
+            lines.push_back(pad(row, map_width) + "  " + (y < side.size() && cells(side[y]) <= side_width ? side[y] : ""));
         }
-        if (!compact) lines.push_back(paint(dim, u ? "▐▌ tu   ░░ zona de observacion   ██ pared" : "@ tu   : zona de observacion   # pared"));
+        lines.push_back(paint(dim, "OBSERVATORY_LOG  ") + "actividad reciente");
         wrap(lines, "> " + message_, columns - 2, 2);
-        if (!compact) lines.push_back("");
         render_checks(lines, compact);
         present(lines, paint(accent, compact ? "[WASD] [E] encuentro [V] probar [X] exportar [Q] salir"
             : "[WASD] mover  [E] encuentro  [V] probar  [X] exportar  [Q] salir"), rows);
@@ -294,42 +338,48 @@ class Game {
     void render_encounter(int columns, int rows) const {
         const bool u = terminal_.unicode();
         const auto& s = catalogue()[wild_.species];
+        const auto profile = art::signal_profile(wild_.species);
+        const auto& metadata = art::signal_metadata[wild_.species];
         std::vector<std::string> lines;
-        lines.push_back(header(columns, "ENCUENTRO " + std::to_string(encounters_)));
+        lines.push_back(header(columns, demo_ ? "DEMO" : "TALLER"));
+        lines.push_back(paint(strong, "S" + std::string(lesson_.number < 10 ? "0" : "") + std::to_string(lesson_.number) + "  " + lesson_.title));
         lines.push_back(rule(columns));
-        lines.push_back("");
-
-        // Disposicion Pokemon: ficha a la izquierda, criatura a la derecha.
-        std::string bar;
-        const int filled = std::clamp(wild_.hp / 5, 0, 20);
-        for (int i = 0; i < 20; ++i) bar += i < filled ? (u ? "█" : "#") : (u ? "░" : "-");
-        const char* health = wild_.hp > 50 ? good : wild_.hp > 25 ? pending : "91";
-        const std::vector<std::string> card = {
-            "  " + paint(strong, s.name),
-            "  " + paint(dim, std::string(family_name(s.family)) + "  carga ") + charge_text(s.charge3),
-            "",
-            "  HP " + paint(health, bar) + " " + std::to_string(wild_.hp) + "/100",
-            "",
-            "  " + paint(dim, "tu companero: " + std::string(catalogue()[team_.back().species].name))};
-        const auto pixels = sprite_or_symbol(wild_.species);
-        const int card_width = std::max(40, columns - 22);
-        for (std::size_t y = 0; y < pixels.size(); ++y) lines.push_back(pad(card[y], card_width) + pixels[y]);
-        lines.push_back("");
-
-        lines.push_back(paint(dim, "DETECTOR  datos sinteticos, evento #" + std::to_string(latest_.id)));
-        lines.push_back("  m = " + number(latest_.mass()) + " GeV   pT " + number(latest_.a.pt()) + " / "
-            + number(latest_.b.pt()) + " GeV   q " + signed_charge(latest_.q1) + " / " + signed_charge(latest_.q2));
-        std::string verdict = "  select(event, 0.6) -> " + std::string(latest_selected_ ? "true" : "false") + mark_if(4);
-        if (lesson_.number == 6)
-            verdict = "  in_window(m, 3.0, 3.2) -> " + std::string(latest_window_ ? "true" : "false") + mark_if(6);
-        lines.push_back(verdict);
-        lines.push_back("");
-
-        lines.push_back("  [1] Interactuar   " + paint(dim, "damage(hp, 25)") + mark_if(2));
-        lines.push_back("  [2] Capturar      " + paint(dim, "capture(team, &wild)") + mark_if(3));
-        lines.push_back("  [3] Huir          " + paint(dim, "volver al mapa"));
-        lines.push_back("");
-        wrap(lines, "> " + message_, columns - 2, 2);
+        const int left_width = (columns - 5) / 2;
+        const auto pair = [&](const std::string& left, const std::string& right) {
+            lines.push_back(pad(left, left_width) + " " + paint(dim, u ? "│" : "|") + " " + right);
+        };
+        pair(paint(dim, "SPECIMEN_INSPECTOR"), paint(dim, "SPECIMEN_SIGNAL / " + std::string(profile.alternate ? "ALT Q/SPIN" : "LOG")));
+        pair(paint(strong, std::string(s.name) + " / " + s.symbol), paint(profile.alternate ? pending : accent,
+            std::string(profile.alternate ? "ALT" : "LOG") + " / base "
+                + std::to_string(static_cast<int>(std::lround(signal_motion_.gain * 100.0))) + "%"));
+        pair(std::string(family_name(s.family)) + " q=" + charge_text(s.charge3) + " spin=" + number(metadata.spin),
+             "m=" + (metadata.mass_mev ? number(*metadata.mass_mev) + " MeV/c^2" : std::string("N/D")));
+        const int plot_width = std::max(9, std::min(29, columns - left_width - 5));
+        const auto plot = art::lissajous(profile, signal_motion_.phase, signal_motion_.gain,
+                                        plot_width, columns < 80 ? 4 : 5, u);
+        const auto& ally = catalogue()[team_.back().species];
+        for (std::size_t i = 0; i < plot.size(); ++i) {
+            std::string left;
+            if (i == 0) left = "HP juego " + std::to_string(wild_.hp) + "/100";
+            else if (i == 1) left = "captura: HP <= 50";
+            else if (i == 2) left = "PARTICLE_REGISTRY " + std::to_string(team_.size()) + "/6";
+            else if (i == 3) left = "Ultimo: " + std::string(ally.name) + " / " + ally.symbol;
+            pair(left, paint(profile.alternate ? pending : accent, plot[i]));
+        }
+        pair(paint(dim, "EVENT_INSPECTOR"), "SINTETICO #" + std::to_string(latest_.id));
+        pair("m " + number(latest_.mass()) + " GeV",
+             "pT " + number(latest_.a.pt()) + "/" + number(latest_.b.pt()) + " GeV");
+        pair("candidatos q " + signed_charge(latest_.q1) + "/" + signed_charge(latest_.q2),
+             lesson_.number == 6 ? "in_window=" + std::string(latest_window_ ? "true" : "false")
+                                 : "select=" + std::string(latest_selected_ ? "true" : "false"));
+        pair("[1] Interactuar", "[2] Capturar   [3] Volver");
+        if (columns >= 80) lines.push_back(rule(columns));
+        const auto focus = lesson_focus(lesson_.number);
+        lines.push_back(paint(dim, "CODE_INSPECTOR"));
+        wrap(lines, std::string(lesson_.source) + "  " + focus.call, columns - 2, 1);
+        render_checks(lines, true, false);
+        lines.push_back(paint(dim, "OBSERVATORY_LOG"));
+        wrap(lines, message_, columns - 2, 2);
         present(lines, paint(accent, "[1] [2] [3]  [V] probar  [X] exportar  [Q] salir"), rows);
     }
 public:
@@ -338,17 +388,24 @@ public:
     void render_plain() const {
         const auto& focus = lesson_focus(lesson_.number);
         terminal_.clear();
-        std::cout << "ROOT QUEST - S0" << lesson_.number << ' ' << lesson_.title
-            << (demo_ ? "  [DEMO / sin logros]" : "  [TALLER]") << "\nMISION: " << lesson_.task
-            << "\nCODIGO: " << lesson_.source << " -> " << focus.call << ' ' << focus.where << "\n\n";
+        std::cout << "WIRED / OBSERVATORY  S0" << lesson_.number << "  " << lesson_.title
+            << (demo_ ? "  [DEMO / sin logros]" : "  [TALLER]") << "\nTOPOLOGY_OBSERVATORY / sectores\nMision: " << lesson_.task
+            << "\nCodigo: " << lesson_.source << "  " << focus.call << ' ' << focus.where << "\n\n";
         if (encounter_) {
             const auto& s = catalogue()[wild_.species];
-            std::cout << "ENCUENTRO " << encounters_ << ": " << s.name << " (" << family_name(s.family)
-                << "), carga " << charge_text(s.charge3) << "\nHP [";
-            for (int i = 0; i < 10; ++i) std::cout << (i < wild_.hp / 10 ? '#' : '-');
-            std::cout << "] " << wild_.hp << "/100\n"
-                << "DETECTOR [SINTETICO] #" << latest_.id << " m=" << number(latest_.mass())
-                << " GeV  select -> " << (latest_selected_ ? "true" : "false") << "\n\n"
+            const auto profile = art::signal_profile(wild_.species);
+            const auto& metadata = art::signal_metadata[wild_.species];
+            std::cout << "SPECIMEN_INSPECTOR / registro #" << encounters_ << "\n" << s.name << " (" << s.symbol << ", " << family_name(s.family)
+                << "), carga " << charge_text(s.charge3) << "\nHP de juego " << wild_.hp << "/100; captura: HP <= 50 y espacio en registro\n"
+                << "m=" << (metadata.mass_mev ? number(*metadata.mass_mev) + " MeV/c^2" : std::string("N/D"))
+                << " spin=" << number(metadata.spin) << "\nEVENT_INSPECTOR / sintetico #" << latest_.id << " candidatos a/b\n m=" << number(latest_.mass())
+                << " GeV  pT=" << number(latest_.a.pt()) << "/" << number(latest_.b.pt()) << " GeV\n";
+            std::cout << "SPECIMEN_SIGNAL " << (profile.alternate ? "ALT Q/SPIN" : "LOG")
+                << " a=" << number(profile.x_frequency) << " b=" << number(profile.y_frequency)
+                << " spin=" << number(metadata.spin) << "\n";
+            for (const auto& row : art::lissajous(profile, 0.0, 1.0, 31, 5)) std::cout << " " << row << '\n';
+            std::cout << "EVENT_INSPECTOR / DATOS SINTETICOS\n";
+            std::cout << "select -> " << (latest_selected_ ? "true" : "false") << "\n\n"
                 << "[1] Interactuar -> damage(hp, 25)\n[2] Capturar    -> capture(team, &wild)\n[3] Huir\n";
         } else {
             for (int y = 0; y < static_cast<int>(world_.rows.size()); ++y) {
@@ -357,12 +414,12 @@ public:
                     std::cout << (player_.x == x && player_.y == y ? '@' : world_.rows[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)]) << ' ';
                 std::cout << '\n';
             }
-            std::cout << "  @ tu | # pared | : zona de observacion\n";
+            std::cout << "  @ posicion | # sectores | : zona de observacion\n";
         }
-        std::cout << "\nEQUIPO " << team_.size() << "/6:";
+        std::cout << "\nPARTICLE_REGISTRY " << team_.size() << "/6:";
         for (const auto& p : team_) std::cout << ' ' << catalogue()[p.species].symbol << '(' << p.hp << ')';
-        std::cout << "\nDETECTOR [SINTETICO] eventos=" << events_ << " seleccionados=" << selected_ << '\n';
-        if (!checked_) std::cout << "PRUEBAS: pulsa V para comprobar tu codigo\n";
+        std::cout << "\nEVENT_INSPECTOR [DATOS SINTETICOS] eventos=" << events_ << " seleccionados=" << selected_ << '\n';
+        if (!checked_) std::cout << "CODE_INSPECTOR: pulsa V para comprobar tu codigo\n";
         for (const auto& c : checks_) std::cout << (c.ok ? "  [OK]   " : "  [TODO] ") << c.text << '\n';
         std::cout << "> " << message_ << "\n\n"
             << (encounter_ ? "[1] [2] [3]" : "[WASD] Mover  [E] Encuentro")
@@ -372,7 +429,7 @@ public:
         if (!terminal_.rich()) { render_plain(); return; }
         const auto size = terminal_.dimensions();
         if (size.columns < 60 || size.rows < 21) {
-            terminal_.present({"ROOT QUEST", "Consola reducida: " + std::to_string(size.columns) + "x" + std::to_string(size.rows),
+            terminal_.present({"WIRED / OBSERVATORY", "Consola reducida: " + std::to_string(size.columns) + "x" + std::to_string(size.rows),
                 "Amplia a 60x21; recomendado 80x24.", "[Q] Guardar y salir | --plain --step: modo texto"});
             return;
         }
@@ -380,8 +437,16 @@ public:
         else render_map(size.columns, size.rows);
     }
     std::filesystem::path run() {
+        auto previous_tick = std::chrono::steady_clock::now();
         while (!interrupted) {
-            render(); const int key = terminal_.key();
+            render();
+            const bool animate = terminal_.rich() && encounter_;
+            const int key = terminal_.key(animate ? 90 : -1);
+            if (animate) {
+                const auto now = std::chrono::steady_clock::now();
+                signal_motion_.advance(std::chrono::duration<double>(now - previous_tick).count());
+                previous_tick = now;
+            }
             if (key == 'q' || key == 'Q') break;
             if (key == 'v' || key == 'V') {
                 const bool passed = verify() == 0;
@@ -395,12 +460,13 @@ public:
                 if (key == '1') {
                     const int before = wild_.hp;
                     wild_.hp = lesson_.damage(wild_.hp, 25);
+                    if (wild_.hp < before) signal_motion_.impact();
                     message_ = "damage(" + std::to_string(before) + ", 25) devolvio " + std::to_string(wild_.hp) + ".";
-                    if (wild_.hp == 0) { encounter_ = false; message_ += " La criatura se retira."; }
+                    if (wild_.hp == 0) { encounter_ = false; message_ += " El especimen se retira."; }
                     else if (wild_.hp <= 50) message_ += " Ya puedes intentar [2] Capturar.";
                 } else if (key == '2') {
                     if (lesson_.capture(team_, &wild_)) {
-                        encounter_ = false; message_ = "Criatura incorporada al equipo."; award("first_capture");
+                        encounter_ = false; message_ = "Especimen incorporado al registro."; award("first_capture");
                     } else message_ = "capture() devolvio false: HP sobre 50, equipo lleno o funcion pendiente.";
                 } else if (key == '3') { encounter_ = false; message_ = "Volviste al mapa."; }
             } else if (key == 'e' || key == 'E') meet();

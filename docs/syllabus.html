@@ -158,6 +158,42 @@
       border: 1.5px solid var(--cyan-border);
       background: rgba(224, 242, 254, 0.35);
     }
+    .opacity-35 { opacity: 0.35; }
+
+    #topologyGrid,
+    #topologyNodes {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 16px;
+      min-width: 0;
+    }
+
+    @media (min-width: 1024px) {
+      #topologyGrid {
+        grid-template-columns: minmax(0, 1fr) 210px minmax(0, 1fr);
+        column-gap: 24px;
+        align-items: center;
+      }
+      #topologyNodes { display: contents; }
+      #topologyNodes > :nth-child(1) { grid-column: 1; grid-row: 1; }
+      #topologyNodes > :nth-child(2) { grid-column: 3; grid-row: 1; }
+      #topologyNodes > :nth-child(3) { grid-column: 1; grid-row: 2; }
+      #topologyNodes > :nth-child(4) { grid-column: 3; grid-row: 2; }
+      #topologyNodes > :nth-child(5) { grid-column: 1; grid-row: 3; }
+      #topologyNodes > :nth-child(6) { grid-column: 3; grid-row: 3; }
+      #centralHubBox { grid-column: 2; grid-row: 2; }
+    }
+
+    @media (max-width: 640px) {
+      .topology-title,
+      .topology-filters { width: 100%; }
+      .topology-title { display: block; }
+      .topology-title > span { display: block; }
+      .topology-title > span + span { margin-top: 4px; }
+      .topology-filters { flex-wrap: wrap; }
+      .topology-filters > span { width: 100%; }
+      .topology-filters > button { flex: 1 1 44px; justify-content: center; min-height: 44px; }
+    }
 
     /* Connection Ports */
     .port-dot {
@@ -373,12 +409,12 @@
 
         <!-- 2. INTERACTIVE TOPOLOGY NETWORK (BESZEL HUB STYLE) -->
         <section id="sectionTopology" class="space-y-2">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <div class="text-[11px] tracking-widest text-zinc-500 uppercase flex items-center gap-2">
+          <div class="topology-toolbar flex flex-wrap items-center justify-between gap-2">
+            <div class="topology-title text-[11px] tracking-widest text-zinc-500 uppercase flex items-center gap-2">
               <span>TOPOLOGY_OBSERVATORY // FLUJO DE DEPENDENCIAS DEL CURSO</span>
               <span class="text-zinc-400">(Haz clic en cualquier nodo S01–S06 para inspeccionar su especificación y código)</span>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="topology-filters flex items-center gap-2">
               <span class="text-[11px] text-zinc-500">FILTRO SEMANAL:</span>
               <button onclick="filterWeek('ALL')" id="flt-ALL" class="tech-btn active-mode">ALL</button>
               <button onclick="filterWeek(1)" id="flt-1" class="tech-btn">WK_01</button>
@@ -392,15 +428,9 @@
             <!-- SVG Orthogonal Lines Behind Nodes -->
             <svg id="topoSvg" class=" hidden lg:block absolute inset-0 w-full h-full pointer-events-none" style="z-index: 1;"></svg>
 
-            <!-- 3-Column Hub Layout -->
-            <div class="grid grid-cols-1 lg:grid-cols-[1fr_210px_1fr] gap-6 items-center relative z-10">
-
-              <!-- Left Column: S01, S03, S05 -->
-              <div class="space-y-4" id="leftNodesCol"></div>
-
-              <!-- Center Hub: CORE ENGINE -->
-              <div class="flex flex-col items-center justify-center my-4 lg:my-0">
-                <div id="centralHubBox" class="b-box px-4 py-3 text-center w-full shadow-none border-zinc-900 bg-white relative">
+            <div id="topologyGrid" class="relative z-10">
+              <div id="topologyNodes"></div>
+              <div id="centralHubBox" class="b-box px-4 py-3 text-center w-full shadow-none border-zinc-900 bg-white relative">
                   <div class="text-[10px] tracking-widest text-sky-700 font-bold uppercase">CORE_HARNESS_HUB</div>
                   <div class="font-bold text-xs mt-0.5">C++17 // CERN ROOT 6</div>
                   <div class="my-2 h-[22px] w-full">
@@ -410,12 +440,7 @@
                     <span>LSP: clangd</span>
                     <span class="text-emerald-600 font-semibold">● LINKED</span>
                   </div>
-                </div>
               </div>
-
-              <!-- Right Column: S02, S04, S06 -->
-              <div class="space-y-4" id="rightNodesCol"></div>
-
             </div>
           </div>
         </section>
@@ -1145,10 +1170,8 @@ int main(int argc, char** argv) {
      * 4. RENDER TOPOLOGY NODES (BESZEL HUB STYLE)
      ********************************************************************/
     function renderTopologyNodes() {
-      const leftCol = document.getElementById('leftNodesCol');
-      const rightCol = document.getElementById('rightNodesCol');
-      leftCol.innerHTML = '';
-      rightCol.innerHTML = '';
+      const nodes = document.getElementById('topologyNodes');
+      nodes.innerHTML = '';
 
       SESSIONS.forEach((s) => {
         const isFilteredOut = state.weekFilter !== 'ALL' && s.week !== state.weekFilter;
@@ -1159,6 +1182,7 @@ int main(int argc, char** argv) {
         card.style.width = '100%';
         card.id = `topo-node-${s.id}`;
         card.className = `topo-node ${s.id === state.selectedSessionId ? 'selected' : ''} ${isFilteredOut ? 'opacity-35' : ''}`;
+        card.setAttribute('aria-pressed', String(s.id === state.selectedSessionId));
         card.onclick = () => selectSession(s.id);
 
         card.innerHTML = `
@@ -1201,11 +1225,7 @@ int main(int argc, char** argv) {
           </div>
         `;
 
-        if (s.id % 2 === 1) {
-          leftCol.appendChild(card);
-        } else {
-          rightCol.appendChild(card);
-        }
+        nodes.appendChild(card);
       });
 
       setTimeout(drawTopologyConnectors, 30);
@@ -1268,7 +1288,10 @@ int main(int argc, char** argv) {
       // Update topology card highlight
       SESSIONS.forEach(s => {
         const el = document.getElementById(`topo-node-${s.id}`);
-        if (el) el.classList.toggle('selected', s.id === id);
+        if (el) {
+          el.classList.toggle('selected', s.id === id);
+          el.setAttribute('aria-pressed', String(s.id === id));
+        }
         const qBtn = document.getElementById(`quick-s${s.id}`);
         if (qBtn) qBtn.classList.toggle('active-mode', s.id === id);
       });

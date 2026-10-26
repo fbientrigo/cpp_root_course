@@ -87,14 +87,20 @@ class TerminalScreen:
 
 
 class PtyGame:
-    def __init__(self, binary, folder, *args, columns=80, rows=24, term="xterm-256color"):
+    def __init__(self, binary, folder, *args, columns=80, rows=24, term="xterm-256color", colorterm=None,
+                 locale="C.UTF-8", demo=True):
         self.master, self.slave = pty.openpty()
         self.resize(columns, rows)
         self.before = termios.tcgetattr(self.slave)
         self.output = b""
-        self.process = subprocess.Popen([str(binary), "--demo", *args], stdin=self.slave,
+        env = dict(os.environ, TERM=term, LANG=locale, LC_ALL=locale)
+        env.pop("COLORTERM", None)
+        if colorterm:
+            env["COLORTERM"] = colorterm
+        command = [str(binary)] + (["--demo"] if demo else []) + list(args)
+        self.process = subprocess.Popen(command, stdin=self.slave,
                                         stdout=self.slave, stderr=self.slave, cwd=folder,
-                                        env=dict(os.environ, TERM=term, LANG="C.UTF-8", LC_ALL="C.UTF-8"))
+                                        env=env)
 
     def resize(self, columns, rows):
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
@@ -193,8 +199,10 @@ class CourseTest(unittest.TestCase):
             result = self.run_game(3, "--demo", "--plain", "--step", "--student", "ana",
                                    input="e\n1\n1\n2\nx\nq\n", cwd=folder)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("Criatura incorporada al equipo", result.stdout)
-            self.assertIn("EQUIPO 2/6", result.stdout)
+            self.assertIn("Especimen incorporado al registro", result.stdout)
+            self.assertIn("PARTICLE_REGISTRY 2/6", result.stdout)
+            self.assertIn("SPECIMEN_INSPECTOR", result.stdout)
+            self.assertIn("EVENT_INSPECTOR [DATOS SINTETICOS]", result.stdout)
             self.assertEqual(len(list(csv.DictReader(io.StringIO((Path(folder) / "output/encounters.csv").read_text())))), 1)
             profile = json.loads((Path(folder) / ".course/demo/progress.json").read_text())
             self.assertTrue(profile['demo']); self.assertEqual(profile['achievements'], [])
@@ -273,7 +281,7 @@ class CourseTest(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "pseudoterminal POSIX")
     def test_persistent_screen_100_moves_and_encounter(self):
         with tempfile.TemporaryDirectory() as folder:
-            game = PtyGame(self.binaries[3], folder)
+            game = PtyGame(self.binaries[3], folder, colorterm="truecolor")
             try:
                 game.wait_for(b'[Q]')
                 game.read(.08)
@@ -288,12 +296,15 @@ class CourseTest(unittest.TestCase):
                 screen = TerminalScreen(80, 24)
                 visible = screen.read(game.output)
                 self.assertIn('75', visible)
+                self.assertIn('damage(100, 25) devolvio 75.', visible)
                 self.assertIn('SINTETICO', visible.upper())
                 self.assertIn('[Q]', visible)
-                self.assertGreaterEqual(game.output.count(b'ROOT QUEST'), 100)
+                self.assertGreaterEqual(game.output.count(b'WIRED / OBSERVATORY'), 100)
                 self.assertEqual(screen.scrolls, 0)
                 self.assertEqual(screen.overflow, 0)
                 game.key('1')
+                visible = TerminalScreen(80, 24).read(game.output)
+                self.assertIn('Ya puedes intentar [2] Capturar.', visible)
                 game.key('2')
                 screen = TerminalScreen(80, 24)
                 self.assertIn('2/6', screen.read(game.output))
@@ -320,45 +331,102 @@ class CourseTest(unittest.TestCase):
                 game.close()
 
     @unittest.skipIf(os.name == "nt", "pseudoterminal POSIX")
-    def test_pixel_encounters_replace_map_and_capture_updates_companion(self):
+    def test_specimen_signal_keeps_catalogue_and_synthetic_data_distinct(self):
         with tempfile.TemporaryDirectory() as folder:
             game = PtyGame(self.binaries[3], folder)
             try:
                 game.wait_for(b'[Q]')
                 screen = TerminalScreen(80, 24)
-                self.assertIn('MISION', screen.read(game.output))
-                # All six art bases appear through normal gameplay, no demo-only
-                # mechanics. Check the emitted picture, not the source matrices.
-                pictures = set()
+                visible = screen.read(game.output)
+                self.assertIn('TOPOLOGY_OBSERVATORY', visible)
+                self.assertIn('PARTICLE_REGISTRY 1/6', visible)
+                self.assertIn('[Q] salir', visible.splitlines()[-1])
+                self.assertIn('──┤', visible)
                 names = {1: 'Muon', 3: 'Neutrino electronico', 6: 'Up',
                          12: 'Foton', 16: 'Higgs', 17: 'Electron'}
                 for encounter in range(1, 18):
                     game.key('e')
                     screen = TerminalScreen(80, 24)
                     visible = screen.read(game.output)
-                    self.assertIn('ENCUENTRO', visible)
-                    self.assertNotIn('MISION', visible)
+                    self.assertIn('SPECIMEN_INSPECTOR', visible)
+                    self.assertNotIn('TOPOLOGY_OBSERVATORY', visible)
+                    self.assertIn('EVENT_INSPECTOR', visible)
+                    self.assertIn('SINTETICO', visible)
                     self.assertIn('100/100', visible)
+                    self.assertIn('captura: HP <= 50', visible)
                     self.assertIn('[1] Interactuar', visible)
+                    self.assertTrue('*' in visible or any(0x2800 <= ord(char) <= 0x28ff for char in visible))
                     if encounter in names:
                         self.assertIn(names[encounter], visible)
-                        picture = '\n'.join(row[56:] for row in visible.splitlines()[3:9])
-                        self.assertGreater(sum(picture.count(c) for c in '▀▄█'), 15)
-                        pictures.add(picture)
+                        self.assertIn('spin=', visible)
+                    if encounter in (3, 4, 5, 12, 13):
+                        self.assertIn('ALT Q/SPIN', visible)
+                        self.assertIn(b'38;5;172', game.output)
+                    else:
+                        self.assertIn('LOG', visible)
                     if encounter == 6:
-                        self.assertIn('carga +2/3 e', visible)
+                        self.assertIn('q=+2/3 e', visible)
+                    if encounter == 1:
+                        game.key('1')
+                        visible = TerminalScreen(80, 24).read(game.output)
+                        self.assertIn('damage(100, 25) devolvio 75.', visible)
+                        self.assertIn('base 10%', visible)
+                        game.key('1')
+                        visible = TerminalScreen(80, 24).read(game.output)
+                        self.assertIn('Ya puedes intentar [2] Capturar.', visible)
                     game.key('3')
-                self.assertEqual(len(pictures), 6)
-                # The next encounter is a muon again; capture leaves the scene
-                # and the new companion portrait immediately replaces Electron.
+                # Capture updates the registry without changing its physical labels.
                 game.key('e112')
                 screen = TerminalScreen(80, 24)
                 visible = screen.read(game.output)
-                self.assertIn('MISION', visible)
-                self.assertNotIn('ENCUENTRO', visible)
-                self.assertIn('EQUIPO 2/6  e- mu-', visible)
-                self.assertIn('EQUIPO 2/6', visible)
+                self.assertIn('TOPOLOGY_OBSERVATORY', visible)
+                self.assertNotIn('SPECIMEN_INSPECTOR', visible)
+                self.assertIn('PARTICLE_REGISTRY 2/6', visible)
+                self.assertIn('e- mu-', visible)
+                self.assertIn('Ultimo: Muon', visible)
+                self.assertIn('[Q] salir', visible.splitlines()[-1])
+                for _ in range(4):
+                    game.key('e112')
+                screen = TerminalScreen(80, 24)
+                visible = screen.read(game.output)
+                self.assertIn('PARTICLE_REGISTRY 6/6', visible)
+                self.assertIn('e- mu- tau- nu_e nu_mu nu_tau', visible)
+                self.assertIn('Ultimo: Neutrino tauonico', visible)
+                self.assertIn('LEPTON q=0 e HP juego=50', visible)
+                self.assertIn('Posicion ', visible)
                 self.assertEqual(screen.scrolls, 0)
+                self.assertEqual(screen.overflow, 0)
+                game.finish()
+            finally:
+                game.close()
+
+    @unittest.skipIf(os.name == "nt", "pseudoterminal POSIX")
+    def test_long_registry_roster_wraps_without_losing_symbols(self):
+        with tempfile.TemporaryDirectory() as folder:
+            game = PtyGame(self.binaries[3], folder)
+            try:
+                game.wait_for(b"[Q]")
+                for _ in range(2):
+                    game.key("e")
+                    game.key("3")
+                game.key("e112")  # electron neutrino
+                game.key("e112")  # muon neutrino
+                game.key("e112")  # tau neutrino
+                for _ in range(14):
+                    game.key("e")
+                    game.key("3")
+                game.key("e112")  # next cycle: electron neutrino
+                game.key("e112")  # muon neutrino, sixth registration
+                visible = TerminalScreen(80, 24).read(game.output)
+                self.assertIn("PARTICLE_REGISTRY 6/6", visible)
+                self.assertIn("e- nu_e nu_mu nu_tau nu_e", visible)
+                roster_rows = [line for line in visible.splitlines() if "nu_mu" in line]
+                self.assertGreaterEqual(len(roster_rows), 2)
+                self.assertIn("Ultimo: Neutrino muonico", visible)
+                self.assertIn("Posicion ", visible)
+                self.assertEqual(TerminalScreen(80, 24).scrolls, 0)
+                screen = TerminalScreen(80, 24)
+                screen.read(game.output)
                 self.assertEqual(screen.overflow, 0)
                 game.finish()
             finally:
@@ -382,9 +450,70 @@ class CourseTest(unittest.TestCase):
                         self.assertTrue(visible.strip())
                         self.assertEqual(screen.scrolls, 0)
                         self.assertEqual(screen.overflow, 0)
+                        if (columns, rows) in ((60, 21), (80, 24)):
+                            self.assertIn('[Q] salir', visible.splitlines()[-1])
                 game.finish()
                 self.assertEqual(termios.tcgetattr(game.slave), game.before)
             finally:
+                game.close()
+
+    @unittest.skipIf(os.name == "nt", "pseudoterminal POSIX")
+    def test_pending_encounter_keeps_feedback_and_footer_at_60x21(self):
+        with tempfile.TemporaryDirectory() as folder:
+            game = PtyGame(self.binaries[3], folder, columns=60, rows=21, demo=False)
+            try:
+                game.wait_for(b"[Q]")
+                game.key("e")
+                game.key("v")
+                game.key("1")
+                screen = TerminalScreen(60, 21)
+                visible = screen.read(game.output)
+                self.assertIn("damage(100, 25) devolvio 75.", visible)
+                self.assertIn("CODE_INSPECTOR", visible)
+                self.assertIn("EVENT_INSPECTOR", visible)
+                self.assertIn("m 1.427 GeV", visible)
+                self.assertIn("pT 0.585/0.585 GeV", visible)
+                self.assertIn("[Q] salir", visible.splitlines()[-1])
+                self.assertIn("[1] [2] [3]", visible.splitlines()[-1])
+                self.assertEqual(screen.scrolls, 0)
+                self.assertEqual(screen.overflow, 0)
+            finally:
+                game.finish()
+                game.close()
+
+    @unittest.skipIf(os.name == "nt", "pseudoterminal POSIX")
+    def test_observatory_palette_uses_advertised_terminal_depth(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for term, colorterm, expected, forbidden in (
+                    ("xterm-256color", None, b"38;5;32m", b"38;2;"),
+                    ("xterm", "truecolor", b"38;2;2;132;199m", b"38;5;32m"),
+                    ("vt100", None, b"\x1b[36m", b"38;")):
+                with self.subTest(term=term, colorterm=colorterm):
+                    game = PtyGame(self.binaries[3], folder, term=term, colorterm=colorterm)
+                    try:
+                        game.wait_for(b"[Q]")
+                        self.assertIn(expected, game.output)
+                        self.assertNotIn(forbidden, game.output)
+                    finally:
+                        game.close()
+
+    @unittest.skipIf(os.name == "nt", "pseudoterminal POSIX")
+    def test_ascii_locale_keeps_topology_and_specimen_ascii(self):
+        with tempfile.TemporaryDirectory() as folder:
+            game = PtyGame(self.binaries[3], folder, locale="C")
+            try:
+                game.wait_for(b"[Q]")
+                visible = TerminalScreen(80, 24).read(game.output)
+                self.assertIn("TOPOLOGY_OBSERVATORY", visible)
+                self.assertIn("PARTICLE_REGISTRY", visible)
+                game.key("e")
+                visible = TerminalScreen(80, 24).read(game.output)
+                self.assertIn("SPECIMEN_INSPECTOR", visible)
+                self.assertIn("Muon", visible)
+                plain_output = re.sub(rb"\x1b\[[0-?]*[ -/]*[@-~]", b"", game.output)
+                self.assertTrue(all(byte < 128 for byte in plain_output))
+            finally:
+                game.finish()
                 game.close()
 
     def test_redirected_and_plain_step_output_have_no_ansi(self):
@@ -394,7 +523,7 @@ class CourseTest(unittest.TestCase):
                     result = self.run_game(1, '--demo', *args, input='e\n1\nq\n', cwd=folder)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertNotIn('\x1b', result.stdout)
-                    self.assertIn('ROOT QUEST', result.stdout)
+                    self.assertIn('WIRED / OBSERVATORY', result.stdout)
                     self.assertIn('SINTETICO', result.stdout)
 
     @unittest.skipIf(os.name == "nt", "pseudoterminal POSIX")
@@ -427,6 +556,98 @@ class CourseTest(unittest.TestCase):
                         self.assertEqual(termios.tcgetattr(game.slave), game.before)
                     finally:
                         game.close()
+
+    def test_observatory_color_depth_requires_terminal_advertisement(self):
+        self.assertEqual(cli.terminal_color_depth("xterm", ""), 16)
+        self.assertEqual(cli.terminal_color_depth("xterm-256color", ""), 256)
+        self.assertEqual(cli.terminal_color_depth("xterm", "truecolor"), 24)
+        self.assertEqual(cli.terminal_color_depth("screen-direct", ""), 24)
+
+    @unittest.skipIf(os.name == "nt", "pseudoterminal POSIX")
+    def test_topology_s03_s05_keeps_title_task_and_controls_at_80x24(self):
+        references = {
+            3: ("Equipo, referencias y colecciones",
+                "Debilita una criatura y agregala al vector sin perder el cambio."),
+            5: ("Persistencia y esquema de datos",
+                "Conserva cada evento. Luego inspecciona y escribe su TTree real en ROOT."),
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            for level in (3, 5):
+                with self.subTest(level=level):
+                    game = PtyGame(self.binaries[level], folder, columns=80, rows=24)
+                    try:
+                        game.wait_for(b"[Q]")
+                        visible = TerminalScreen(80, 24).read(game.output)
+                        flattened = " ".join(visible.split())
+                        self.assertIn("WIRED / OBSERVATORY", visible)
+                        self.assertIn("EVENT_INSPECTOR", visible)
+                        self.assertIn("TOPOLOGY_OBSERVATORY", visible)
+                        self.assertIn("CODE_INSPECTOR", visible)
+                        self.assertIn(references[level][0], visible)
+                        self.assertIn(references[level][1], flattened)
+                        self.assertIn("[WASD] mover", visible)
+                    finally:
+                        game.finish()
+                        game.close()
+
+    @unittest.skipIf(os.name == "nt", "pseudoterminal POSIX")
+    def test_watch_terminal_shows_controls_on_pending_and_final_sessions(self):
+        for args in (("1", "--student", "watch-ui"), ("6", "--demo")):
+            with self.subTest(args=args):
+                master, slave = pty.openpty()
+                fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
+                before = termios.tcgetattr(slave)
+                env = dict(os.environ, TERM="xterm", COLORTERM="truecolor", LANG="C.UTF-8", LC_ALL="C.UTF-8")
+                process = subprocess.Popen([sys.executable, str(ROOT / "course.py"), "watch", *args],
+                                           stdin=slave, stdout=slave, stderr=slave, cwd=ROOT, env=env)
+                output = bytearray()
+                deadline = time.monotonic() + 30
+                try:
+                    while time.monotonic() < deadline and b"[q] salir" not in output:
+                        ready, _, _ = select.select([master], [], [], 0.1)
+                        if ready:
+                            output.extend(os.read(master, 4096))
+                    self.assertIn(b"[q] salir", output)
+                    self.assertIn(b"\x1b[38;2;2;132;199m", output)
+                    screen = TerminalScreen(80, 24)
+                    visible = screen.read(b"\x1b[?1049h" + bytes(output))
+                    self.assertIn("WIRED / OBSERVATORY", visible.splitlines()[0])
+                    self.assertIn("[q] salir", visible.splitlines()[-1])
+                    self.assertEqual(screen.scrolls, 0)
+                    self.assertEqual(screen.overflow, 0)
+                    if args[0] == "1":
+                        start = len(output)
+                        deadline = time.monotonic() + 10
+                        os.write(master, b"h")
+                        while time.monotonic() < deadline:
+                            ready, _, _ = select.select([master], [], [], 0.1)
+                            if ready:
+                                output.extend(os.read(master, 4096))
+                            tail = bytes(output[start:])
+                            if b"Pista" in tail and b"[q] salir" in tail:
+                                break
+                        self.assertIn(b"Pista", output[start:])
+                        screen = TerminalScreen(80, 24)
+                        visible = screen.read(b"\x1b[?1049h" + bytes(output))
+                        self.assertIn("Pista", visible)
+                        self.assertIn("[q] salir", visible.splitlines()[-1])
+                        self.assertEqual(visible.count("WIRED / OBSERVATORY"), 1)
+                        self.assertEqual(screen.scrolls, 0)
+                        self.assertEqual(screen.overflow, 0)
+                    os.write(master, b"q")
+                    process.wait(timeout=10)
+                    ready, _, _ = select.select([master], [], [], 0.1)
+                    if ready:
+                        output.extend(os.read(master, 4096))
+                    self.assertEqual(process.returncode, 0)
+                    self.assertTrue(output.endswith(b"\x1b[0m"))
+                    self.assertEqual(termios.tcgetattr(slave), before)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait(timeout=5)
+                    os.close(master)
+                    os.close(slave)
 
     def test_watch_once_reports_next_check_and_completion(self):
         # Sin terminal, watch compila y comprueba una vez, como un check guiado.

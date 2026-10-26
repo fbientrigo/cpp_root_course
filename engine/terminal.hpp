@@ -1,6 +1,7 @@
 #pragma once
 #include "domain.hpp"
 #include <algorithm>
+#include <chrono>
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
@@ -17,7 +18,6 @@
 #include <termios.h>
 #include <unistd.h>
 #endif
-
 namespace course {
 inline volatile std::sig_atomic_t interrupted = 0;
 inline void on_interrupt(int) { interrupted = 1; }
@@ -26,6 +26,7 @@ public:
     struct Dimensions { int columns = 80; int rows = 24; };
 private:
     bool step_, ansi_ = false, sound_, unicode_ = false;
+    int color_depth_ = 0;
     std::string previous_frame_;
 #ifdef _WIN32
     HANDLE output_ = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -39,6 +40,17 @@ private:
     bool changed_ = false;
     struct sigaction old_int_{}, old_term_{};
 #endif
+    static int depth_from_environment() {
+        const char* color = std::getenv("COLORTERM");
+        if (color && (std::string(color) == "truecolor" || std::string(color) == "24bit")) return 24;
+        const char* term = std::getenv("TERM");
+        if (term) {
+            const std::string name(term);
+            if (name.find("-direct") != std::string::npos || name.find("-24bit") != std::string::npos) return 24;
+            if (name.find("256color") != std::string::npos) return 256;
+        }
+        return 16;
+    }
     // Renderer glyphs have one display cell. Preserve CSI colors while clipping UTF-8
     // at character boundaries; reserve the last column to avoid terminal autowrap.
     static std::string clipped(const std::string& row, int width) {
@@ -80,6 +92,7 @@ public:
         if (ansi_) {
             old_codepage_ = GetConsoleOutputCP();
             unicode_ = SetConsoleOutputCP(CP_UTF8) != 0;
+            color_depth_ = depth_from_environment();
         }
         old_int_ = std::signal(SIGINT, on_interrupt);
         old_term_ = std::signal(SIGTERM, on_interrupt);
@@ -88,6 +101,7 @@ public:
         if (!input_tty) step_ = true;
         const char* term = std::getenv("TERM");
         ansi_ = !plain && !step_ && isatty(STDOUT_FILENO) && term && *term && std::string(term) != "dumb";
+        if (ansi_) color_depth_ = depth_from_environment();
         if (!step_ && tcgetattr(STDIN_FILENO, &old_) == 0) {
             auto raw = old_;
             raw.c_lflag &= static_cast<tcflag_t>(~(ICANON | ECHO));
@@ -109,7 +123,7 @@ public:
         sigaction(SIGINT, &action, &old_int_);
         sigaction(SIGTERM, &action, &old_term_);
 #endif
-        if (ansi_) std::cout << "\033[?1049h\033[?25l\033[0;37;40m\033[H\033[2J" << std::flush;
+        if (ansi_) std::cout << "\033[?1049h\033[?25l" << paper() << "\033[H\033[2J" << std::flush;
     }
     Terminal(const Terminal&) = delete;
     Terminal& operator=(const Terminal&) = delete;
@@ -129,6 +143,12 @@ public:
     }
     bool rich() const { return ansi_; }
     bool unicode() const { return ansi_ && unicode_; }
+    int color_depth() const { return color_depth_; }
+    std::string paper() const {
+        if (color_depth_ == 24) return "\033[0;38;2;24;24;27;48;2;251;251;250m";
+        if (color_depth_ == 256) return "\033[0;38;5;232;48;5;255m";
+        return "\033[0;30;47m";
+    }
     Dimensions dimensions() const {
         Dimensions size;
 #ifdef _WIN32
@@ -156,11 +176,11 @@ public:
         const int count = std::min(static_cast<int>(rows.size()), size.rows);
         std::string frame = "\033[H";
         for (int i = 0; i < count; ++i) {
-            frame += "\033[" + std::to_string(i + 1) + ";1H\033[0;37;40m";
+            frame += "\033[" + std::to_string(i + 1) + ";1H" + paper();
             frame += clipped(rows[static_cast<std::size_t>(i)], std::max(0, size.columns - 1));
-            frame += "\033[0;37;40m\033[K";
+            frame += paper() + "\033[K";
         }
-        if (count < size.rows) frame += "\033[" + std::to_string(count + 1) + ";1H\033[0;37;40m\033[J";
+        if (count < size.rows) frame += "\033[" + std::to_string(count + 1) + ";1H" + paper() + "\033[J";
         // Include dimensions: a resize must repaint even if the text is unchanged.
         const std::string identity = std::to_string(size.columns) + "x" + std::to_string(size.rows) + frame;
         if (identity != previous_frame_) {
@@ -168,11 +188,11 @@ public:
             previous_frame_ = identity;
         }
     }
-    void clear() const { if (ansi_) std::cout << "\033[2J\033[H"; }
+    void clear() const { if (ansi_) std::cout << paper() << "\033[2J\033[H"; }
     void ink(const char* text) const {
         if (ansi_) std::cout << "\033[36m";
         std::cout << text;
-        if (ansi_) std::cout << "\033[0m";
+        if (ansi_) std::cout << paper();
     }
     void sound() const {
         if (!sound_) return;
@@ -182,7 +202,9 @@ public:
         std::cout << '\a' << std::flush;
 #endif
     }
-    int key() const {
+    // A finite timeout is used only by the live encounter animation. Zero
+    // means that no key arrived; the default keeps every existing caller blocking.
+    int key(int timeout_ms = -1) const {
         if (interrupted) return 'q';
         if (step_) {
             std::cout << "\naccion> " << std::flush;
@@ -204,7 +226,12 @@ public:
 #endif
         }
 #ifdef _WIN32
-        while (!_kbhit()) { if (interrupted) return 'q'; Sleep(20); }
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(std::max(0, timeout_ms));
+        while (!_kbhit()) {
+            if (interrupted) return 'q';
+            if (timeout_ms >= 0 && std::chrono::steady_clock::now() >= deadline) return 0;
+            Sleep(20);
+        }
         int c = _getch();
         if (c == 0 || c == 224) {
             c = _getch();
@@ -215,9 +242,12 @@ public:
         char c = 0;
         while (!interrupted) {
             fd_set set; FD_ZERO(&set); FD_SET(STDIN_FILENO, &set);
-            timeval timeout{0, 100000};
+            timeval timeout{};
+            timeout.tv_sec = timeout_ms < 0 ? 0 : timeout_ms / 1000;
+            timeout.tv_usec = timeout_ms < 0 ? 100000 : (timeout_ms % 1000) * 1000;
             const int ready = select(STDIN_FILENO + 1, &set, nullptr, nullptr, &timeout);
             if (ready < 0 && errno != EINTR) return 'q';
+            if (ready == 0 && timeout_ms >= 0) return 0;
             if (ready > 0) {
                 const auto n = read(STDIN_FILENO, &c, 1);
                 if (n == 1) break;

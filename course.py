@@ -8,7 +8,9 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import textwrap
 import time
+import unicodedata
 import zipfile
 
 ROOT = Path(__file__).resolve().parent
@@ -183,16 +185,42 @@ def attempt(level, student, demo):
     return ("passed" if result.returncode == 0 else "pending"), checks
 
 
+def terminal_color_depth(term, colorterm):
+    if colorterm in ("truecolor", "24bit") or term.endswith(("-direct", "-24bit")):
+        return 24
+    return 256 if "256color" in term else 16
+
+
 def watch(first_level, student, demo, plain):
     interactive = sys.stdin.isatty() and sys.stdout.isatty()
     color = interactive and not plain and os.environ.get("TERM") != "dumb"
+    depth = terminal_color_depth(os.environ.get("TERM", ""), os.environ.get("COLORTERM", "")) if color else 0
     utf8 = (sys.stdout.encoding or "").lower().replace("-", "") == "utf8"
     if os.name == "nt" and color:
         os.system("")  # Activa las secuencias VT en la consola de Windows.
     ok, todo = ("✓", "✗") if utf8 else ("OK", "--")
 
+    rgb = {"cyan": "2;132;199", "green": "16;185;129", "amber": "217;119;6",
+           "dim": "113;113;122", "ink": "24;24;27"}
+    xterm = {"cyan": 32, "green": 41, "amber": 172, "dim": 245, "ink": 232}
+
+    def paper():
+        if depth == 24:
+            return "\033[0;38;2;24;24;27;48;2;251;251;250m"
+        if depth == 256:
+            return "\033[0;38;5;232;48;5;255m"
+        return "\033[0;30;47m"
+
     def paint(code, text):
-        return "\033[%sm%s\033[0m" % (code, text) if color else text
+        if not color:
+            return text
+        code = {"92": "green", "96": "cyan", "90": "dim", "93": "amber", "91": "amber", "1": "ink"}.get(code, code)
+        if code in rgb and depth == 24:
+            return "\033[38;2;" + rgb[code] + "m" + text + paper()
+        if code in xterm and depth == 256:
+            return "\033[38;5;%dm%s%s" % (xterm[code], text, paper())
+        ansi = {"cyan": "36", "green": "32", "amber": "33", "dim": "90", "ink": "1;30"}
+        return "\033[%sm%s%s" % (ansi.get(code, code), text, paper())
 
     profile = ROOT / ".course" / ("demo" if demo else student) / "earned.txt"
     passed = set()
@@ -208,43 +236,70 @@ def watch(first_level, student, demo, plain):
     def screen(state, lines):
         info = level_info(level)
         out = []
-        bar = "".join(paint("92", ok if utf8 else "#") if done(i) else
-                      paint("96", "○" if utf8 else "o") if i == level else
-                      paint("90", "·" if utf8 else ".") for i in range(1, 7))
+        size = shutil.get_terminal_size((80, 24))
+        width = max(20, size.columns - 1)
+        def wrapped(text, indent=""):
+            return [indent + part for part in textwrap.wrap(text, max(12, width - len(indent)), break_long_words=True, break_on_hyphens=False)]
+        def clipped(line):
+            out_line = []
+            cells = 0
+            pos = 0
+            while pos < len(line):
+                ansi = re.match(r"\x1b\[[0-?]*[ -/]*[@-~]", line[pos:])
+                if ansi:
+                    out_line.append(ansi.group())
+                    pos += len(ansi.group())
+                    continue
+                char = line[pos]
+                cell_width = 0 if unicodedata.combining(char) else 2 if unicodedata.east_asian_width(char) in "WF" else 1
+                if cells + cell_width > width:
+                    break
+                out_line.append(char)
+                cells += cell_width
+                pos += 1
+            if pos < len(line) and color:
+                out_line.append(paper())
+            return "".join(out_line)
+        sessions = " ".join(paint("green", "%02d" % i) if done(i) else
+                            paint("cyan", "[%02d]" % i) if i == level else
+                            paint("dim", "%02d" % i) for i in range(1, 7))
         finished = sum(done(i) for i in range(1, 7))
-        out.append(paint("1", "ROOT QUEST") + "  " + bar + "  %d/6" % finished
-                   + paint("90", "   alias: " + ("demo" if demo else student)))
+        out.append(paint("ink", "WIRED / OBSERVATORY") + "  " + paint("dim", "DEMO" if demo else "TALLER")
+                   + "  " + sessions + "  %d/6" % finished)
         out.append("")
-        out.append(paint("1", info["title"]))
-        out.append(paint("90", "Archivo  ") + paint("96", info["source"]))
-        out.append(paint("90", "Tarea    ") + info["task"])
+        out.append(paint("ink", info["title"]))
+        out.append(paint("dim", "Archivo  ") + paint("cyan", info["source"]))
+        out.extend(wrapped("Tarea  " + info["task"]))
         out.append("")
+        out.append(paint("dim", "CODE_INSPECTOR"))
         if state == "compile":
-            out.append(paint("91", todo + " No compila.") + " Lee solo el primer error: indica archivo y linea.")
+            out.append(paint("amber", todo + " No compila.") + " Lee solo el primer error: indica archivo y linea.")
             out.append("")
-            out += ["  " + paint("91" if i == 0 else "90", l) for i, l in enumerate(lines)]
+            for i, line in enumerate(lines):
+                out.extend(paint("amber" if i == 0 else "dim", row) for row in wrapped(line, "  "))
         elif state == "crash":
-            out.append(paint("91", todo + " Se cayo al probar."))
-            out += ["  " + l for l in lines]
+            out.append(paint("amber", todo + " Se cayo al probar."))
+            for line in lines:
+                out.extend(wrapped(line, "  "))
         else:
             good = sum(l.startswith("[OK]") for l in lines)
-            out.append(paint("92" if state == "passed" else "93", "PRUEBAS %d/%d" % (good, len(lines))))
+            out.append(paint("green" if state == "passed" else "amber", "%d/%d comprobaciones" % (good, len(lines))))
             for l in lines:
-                mark = paint("92", ok) if l.startswith("[OK]") else paint("93", todo)
+                mark = paint("green", ok) if l.startswith("[OK]") else paint("amber", todo)
                 out.append("  %s %s" % (mark, l.split("]", 1)[1].strip()))
             out.append("")
             if state == "passed":
-                out.append(paint("92", "Nivel completo.") + " Antes de seguir, responde en voz alta:")
-                out.append("  " + info["question"])
+                out.append(paint("green", "Nivel completo.") + " Antes de seguir, responde en voz alta:")
+                out.extend(wrapped(info["question"], "  "))
             else:
                 pending = next(l for l in lines if l.startswith("[TODO]")).split("]", 1)[1].strip()
-                out.append(paint("1", "Siguiente: ") + pending)
-                out.append(paint("90", "Guarda el archivo y se vuelve a comprobar solo." if interactive
+                out.append(paint("ink", "Siguiente: ") + pending)
+                out.append(paint("dim", "Guarda el archivo y se vuelve a comprobar solo." if interactive
                                  else "Corrige y ejecuta: python3 course.py watch"))
         if show_hint and state != "passed":
             out.append("")
-            out.append(paint("96", "PISTA"))
-            out.append("  Antes de escribir: " + info["question"])
+            out.append(paint("dim", "Pista"))
+            out.extend(wrapped("Antes de escribir: " + info["question"], "  "))
             if info["inspect"]:
                 out.append("  Breakpoint en %s; inspecciona %s." % (info["source"], info["inspect"]))
             out.append("  Compara con la referencia jugando: python3 course.py demo %d" % level)
@@ -255,10 +310,14 @@ def watch(first_level, student, demo, plain):
         keys = ["[h] pista", "[p] jugar", "[1-6] nivel", "[q] salir"]
         if state == "passed" and level < 6:
             keys.insert(0, "[n] siguiente")
-        out.append(paint("96", "  ".join(keys)))
+        controls = paint("cyan", "  ".join(keys))
+        out = out[:max(0, size.lines - 1)]
+        out.extend([""] * max(0, size.lines - 1 - len(out)))
+        out.append(controls)
         if color:
-            sys.stdout.write("\033[H\033[2J")
-        print("\n".join(out), flush=True)
+            sys.stdout.write(paper() + "\033[H\033[2J")
+        sys.stdout.write("\n".join(clipped(line) for line in out))
+        sys.stdout.flush()
 
     def sources():
         folder = ROOT / ("levels/%02d" % level)
@@ -270,37 +329,42 @@ def watch(first_level, student, demo, plain):
     if not interactive:
         screen(state, lines)
         return 0 if state == "passed" else 1
-    with Keys() as keys:
-        seen = sources()
-        screen(state, lines)
-        while True:
-            key = keys.read(0.4)
-            current = sources()
-            rerun = current != seen
-            if key in ("q", "Q", "\x03"):
-                break
-            if key in ("h", "H"):
-                show_hint = not show_hint
-                screen(state, lines)
-            elif key in ("n", "N") and state == "passed" and level < 6:
-                level, show_hint, rerun = level + 1, False, True
-            elif key and key in "123456":
-                level, show_hint, rerun = int(key), False, True
-            elif key in ("r", "R"):
-                rerun = True
-            elif key in ("p", "P") and state != "compile":
-                keys.pause()
-                command = [str(build(level, quiet=True)), "--student", student] + (["--demo"] if demo else [])
-                subprocess.call(command, cwd=ROOT)
-                keys.resume()
-                rerun = True
-            if rerun:
-                seen = sources()
-                print(paint("90", "compilando y probando S%02d..." % level), flush=True)
-                state, lines = attempt(level, student, demo)
-                if state == "passed":
-                    passed.add(level)
-                screen(state, lines)
+    try:
+        with Keys() as keys:
+            seen = sources()
+            screen(state, lines)
+            while True:
+                key = keys.read(0.4)
+                current = sources()
+                rerun = current != seen
+                if key in ("q", "Q", "\x03"):
+                    break
+                if key in ("h", "H"):
+                    show_hint = not show_hint
+                    screen(state, lines)
+                elif key in ("n", "N") and state == "passed" and level < 6:
+                    level, show_hint, rerun = level + 1, False, True
+                elif key and key in "123456":
+                    level, show_hint, rerun = int(key), False, True
+                elif key in ("r", "R"):
+                    rerun = True
+                elif key in ("p", "P") and state != "compile":
+                    keys.pause()
+                    command = [str(build(level, quiet=True)), "--student", student] + (["--demo"] if demo else [])
+                    subprocess.call(command, cwd=ROOT)
+                    keys.resume()
+                    rerun = True
+                if rerun:
+                    seen = sources()
+                    print(paint("dim", "compilando y probando S%02d..." % level), flush=True)
+                    state, lines = attempt(level, student, demo)
+                    if state == "passed":
+                        passed.add(level)
+                    screen(state, lines)
+    finally:
+        if color:
+            sys.stdout.write("\033[0m")
+            sys.stdout.flush()
     return 0
 
 
