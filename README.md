@@ -29,6 +29,34 @@ También puedes descargar el ZIP, extraerlo y abrir la carpeta donde está `cour
 El comando `doctor` muestra las herramientas que encuentra; ROOT es opcional.
 En WSL, abre esa carpeta con `code .` y usa la extensión WSL de VS Code.
 
+### Instalar ROOT 6 en WSL2 (Ubuntu 24.04, x86_64)
+
+ROOT **no es necesario para el juego**, pero sí para las macros de `analysis/`
+y los programas C++ que incluyan bibliotecas ROOT. Comprueba primero tu sistema
+con `source /etc/os-release; echo "$PRETTY_NAME"; uname -m`. Estos comandos
+son para **Ubuntu 24.04 x86_64**; si usas otra versión, elige su binario en
+[las distribuciones oficiales de ROOT](https://root.cern.ch/releases/release-64004/).
+
+```bash
+sudo apt update
+sudo apt install -y g++ gdb clangd python3 git wget libtbb-dev \
+  libx11-dev libxext-dev libxft-dev libxpm-dev libglu1-mesa-dev
+mkdir -p "$HOME/opt/root-6.40.04"
+wget -O /tmp/root-6.40.04.tar.gz \
+  https://root.cern/download/root_v6.40.04.Linux-ubuntu24.04-x86_64-gcc13.3.tar.gz
+tar -xzf /tmp/root-6.40.04.tar.gz -C "$HOME/opt/root-6.40.04" --strip-components=1
+source "$HOME/opt/root-6.40.04/bin/thisroot.sh"
+root-config --version
+root -l -b -q
+```
+
+Esta instalación se mantiene fuera del repositorio y no requiere Conda.
+Actívala en cada terminal WSL con `source "$HOME/opt/root-6.40.04/bin/thisroot.sh"`.
+Si quieres activarla automáticamente, añade **una sola vez** esa línea a
+`~/.bashrc` y abre una terminal nueva. No mezcles esta activación con otra
+instalación de ROOT. En Ubuntu 22.04/26.04 usa el archivo oficial construido
+para esa versión, nunca el de 24.04.
+
 ### Windows nativo / PowerShell
 
 Instala [MSYS2](https://www.msys2.org/), abre **MSYS2 UCRT64** y ejecuta:
@@ -124,6 +152,27 @@ Ejemplo sin wrappers:
 g++ -std=c++17 -g -O0 -Iengine engine/main.cpp engine/lesson.cpp levels/01/lesson.cpp -o game
 ./game --step --student mi_alias
 ```
+
+### Depurar un programa C++ que utiliza ROOT (WSL)
+
+El ejecutable del juego **no enlaza ROOT**; su configuración F5 depura solo el
+juego. Para un archivo independiente con `int main()`, activa ROOT y compila
+con los flags de tu instalación. Usa `--glibs` si dibujas con `TCanvas`:
+
+```bash
+source "$HOME/opt/root-6.40.04/bin/thisroot.sh"
+g++ $(root-config --cflags) -O0 -g ejemplo.cpp -o ejemplo $(root-config --glibs)
+gdb --args ./ejemplo
+```
+
+Dentro de GDB: `break main`, `run`, `next`, `step` y `print variable`.
+Para usar F5 sobre **este programa** en VS Code, crea otra configuración de
+depuración que apunte a `ejemplo`; la configuración `Curso: depurar nivel`
+no debe apuntar a él. Para que **clangd** resuelva los `#include <TFile.h>`,
+el proyecto del programa debe incluir `root-config --cflags` en sus comandos
+de compilación (por ejemplo, mediante `compile_commands.json`). Una macro
+`.C` interpretada por ROOT no es directamente el mismo flujo que un ejecutable
+C++ compilado y depurado con GDB.
 
 ## Seis sesiones
 
